@@ -10,7 +10,7 @@ class FlatenREnv(RenderEnv):
     def add_entities(self):
         self.tool = self.scene.add_entity(
             morph = gs.morphs.Mesh(
-                file=self.task_asset("tool.obj"),
+                file=f"{self.project_path}/task03_flatten/tool.obj",
                 scale=0.4,
                 pos=(0.48, 0.415, 0.15+self.desk_height),
                 euler=(180, 0, -90),
@@ -36,7 +36,7 @@ class FlatenREnv(RenderEnv):
             surface=gs.surfaces.Rough(
                 color=(231.0 / 255.0, 211.0 / 255.0, 198.0 / 255.0),
                 vis_mode='recon',
-                recon_backend='splashsurf-1.5-smooth-25'
+                recon_backend='splashsurf'
             ),
         )
 

@@ -10,7 +10,7 @@ class HoldREnv(RenderEnv):
     def add_entities(self):
         self.tool = self.scene.add_entity(
             morph = gs.morphs.Mesh(
-                file=self.task_asset("holder_2000.obj"),
+                file=f"{self.project_path}/task04_holder/holder_2000.obj",
                 scale=0.06,
                 pos=(0.2, 0.4, 0.06+self.desk_height),
                 euler=(90, 0, 90),
@@ -27,7 +27,7 @@ class HoldREnv(RenderEnv):
         )
         self.phone = self.scene.add_entity(
             morph = gs.morphs.Mesh(
-                file=self.task_asset("iphone15.glb"),
+                file=f"{self.project_path}/task04_holder/iphone15.glb",
                 scale=0.1,
                 pos=(0.2, 0.44, 0.04+self.desk_height),
                 euler=(90, 0, 180),

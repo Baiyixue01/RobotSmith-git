@@ -17,7 +17,7 @@ class CalabashEnv(CMAESOptimizer):
             surface=gs.surfaces.Rough(
                 color=(231.0 / 255.0, 211.0 / 255.0, 198.0 / 255.0),
                 vis_mode='recon',
-                recon_backend='splashsurf-1.5-smooth-25'
+                recon_backend='splashsurf'
             ),
         )
 
@@ -52,7 +52,7 @@ class CalabashEnv(CMAESOptimizer):
             surface=gs.surfaces.Rough(
                 color=(231.0 / 255.0, 211.0 / 255.0, 198.0 / 255.0),
                 vis_mode='recon',
-                recon_backend='splashsurf-1.5-smooth-25'
+                recon_backend='splashsurf'
             ),
         )
         self.dough_pos = (0.5, 0.5, 0.5)

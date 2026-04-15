@@ -19,7 +19,7 @@ class FillREnv(RenderEnv):
         self.bottle = self.scene.add_entity(
             material=mat_rigid,
             morph=gs.morphs.Mesh(
-                file=self.task_asset("bottle.obj"),
+                file=f"{self.project_path}/task05_waterfill/bottle.obj",
                 scale=0.0015,
                 pos=(0.0143, 0.5, 0.156+self.desk_height),
                 euler=(90, 0, 90),
@@ -37,7 +37,7 @@ class FillREnv(RenderEnv):
         self.cup = self.scene.add_entity(
             material=mat_rigid,
             morph = gs.morphs.Mesh(
-                file=self.task_asset("simplify_red_cup.obj"),
+                file=f"{self.project_path}/task05_waterfill/simplify_red_cup.obj",
                 scale=1.0,
                 pos=(0, 0.3, 0.064+self.desk_height),
                 euler=(90, 0, 0),
@@ -54,7 +54,7 @@ class FillREnv(RenderEnv):
         self.tool = self.scene.add_entity(
             material=mat_rigid,
             morph = gs.morphs.Mesh(
-                file=self.task_asset("simplify_funnel.obj"),
+                file=f"{self.project_path}/task05_waterfill/simplify_funnel.obj",
                 scale=0.05,
                 pos=(0.3, 0.3, 0.052+self.desk_height),
                 euler=(90, 0, 0),

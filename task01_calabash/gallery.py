@@ -10,7 +10,7 @@ class CalabashREnv(RenderEnv):
     def add_entities(self):
         self.mold_top = self.scene.add_entity(
             morph = gs.morphs.Mesh(
-                file=self.task_asset("mold_top.stl"),
+                file=f"{self.project_path}/task01_calabash/mold_top.stl",
                 scale=0.05,
                 pos=(0, 0.55, 0.001+self.desk_height),
                 euler=(-90, 0, 90),
@@ -26,7 +26,7 @@ class CalabashREnv(RenderEnv):
         )
         self.mold_bottom = self.scene.add_entity(
             morph = gs.morphs.Mesh(
-                file=self.task_asset("mold_bottom.stl"),
+                file=f"{self.project_path}/task01_calabash/mold_bottom.stl",
                 scale=0.05,
                 pos=(0, 0.45, 0.041+self.desk_height) ,
                 euler=(-90, 0, 90),
@@ -50,7 +50,7 @@ class CalabashREnv(RenderEnv):
             surface=gs.surfaces.Rough(
                 color=(231.0 / 255.0, 211.0 / 255.0, 198.0 / 255.0),
                 vis_mode='recon',
-                recon_backend='splashsurf-1.5-smooth-25'
+                recon_backend='splashsurf'
             ),
         )
 

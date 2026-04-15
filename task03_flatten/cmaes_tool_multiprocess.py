@@ -47,7 +47,7 @@ def run_gs_env(env_id, input_queue, output_queue, project_path, img_steps, img_s
         surface=gs.surfaces.Rough(
             color=(231.0 / 255.0, 211.0 / 255.0, 198.0 / 255.0),
             vis_mode='recon',
-            recon_backend='splashsurf-1.5-smooth-25'
+            recon_backend='splashsurf'
         ),
     ) # dough
     tool = scene.add_entity(
