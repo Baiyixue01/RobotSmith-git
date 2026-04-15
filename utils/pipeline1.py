@@ -468,20 +468,50 @@ def render_and_save_with_objects(mesh_path, json_filename, output_folder, num_vi
 
     tool_json = json.load(open(json_filename, 'r'))
     tool_placement = tool_json["placement_func"]
+    placement_filename_matches = re.findall(r"(filename)\s*=\s*\"([^\"]+)\"", tool_placement)
+    if len(placement_filename_matches) == 0:
+        raise ValueError("placement_func must contain filename=\"...\" in gs.Morph.Mesh.")
+    _, placement_filename = placement_filename_matches[0]
+
+    mesh_dir = os.path.dirname(mesh_path)
+    candidate_mesh_path = os.path.join(mesh_dir, placement_filename)
+    if os.path.exists(candidate_mesh_path):
+        mesh_path = candidate_mesh_path
+    elif not os.path.exists(mesh_path):
+        available_mesh_filenames = sorted(
+            [f for f in os.listdir(mesh_dir) if os.path.isfile(os.path.join(mesh_dir, f)) and os.path.splitext(f)[1].lower() in [".obj", ".stl"]]
+        )
+        raise FileNotFoundError(
+            f"Mesh file not found: {placement_filename}. Available mesh files: {available_mesh_filenames}"
+        )
+
     _, p1, p2, p3 = re.findall(r"(pos)\s*=\s*\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\)", tool_placement)[0]
     _, e1, e2, e3 = re.findall(r"(euler)\s*=\s*\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\)", tool_placement)[0]
     _, s1, s2, s3 = re.findall(r"(scale)\s*=\s*\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*\)", tool_placement)[0]
     tool_pos = np.array([float(p1), float(p2), float(p3)])
     tool_euler = np.array([float(e1), float(e2), float(e3)])
     tool_scale = np.array([float(s1), float(s2), float(s3)])
-    mesh = trimesh.load(mesh_path)
+
+    mesh_ext = os.path.splitext(mesh_path)[1].lower()
+    if mesh_ext not in [".stl", ".obj"]:
+        raise ValueError(f"Unsupported mesh format: {mesh_ext}. Only .stl and .obj are supported.")
+
+    mesh = trimesh.load(mesh_path, force='mesh')
+    if isinstance(mesh, trimesh.Scene):
+        mesh = trimesh.util.concatenate([g for g in mesh.geometry.values()])
+    trimesh.repair.fix_normals(mesh, multibody=True)
+    trimesh.repair.fill_holes(mesh)
+
+    repaired_mesh_path = os.path.splitext(mesh_path)[0] + "_repaired" + mesh_ext
+    mesh.export(repaired_mesh_path)
+
     mesh.apply_scale(tool_scale)
     rotation = trimesh.transformers.euler_matrix(
         math.radians(float(e1)), math.radians(float(e2)), math.radians(float(e3)), axes='sxyz'
     )
     mesh.apply_transform(rotation)
     mesh.apply_translation(tool_pos)
-    new_mesh_path = mesh_path[:-4], '_loaded.obj'
+    new_mesh_path = os.path.splitext(repaired_mesh_path)[0] + "_loaded.obj"
     mesh.export(new_mesh_path)
 
     mesh = o3d.io.read_triangle_mesh(new_mesh_path)

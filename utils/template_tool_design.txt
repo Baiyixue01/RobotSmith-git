@@ -181,7 +181,7 @@ To describe a generated tool, you will use a json format. Here is an example:
                 ...
                 # the input parameter parts here is a list of dictionaries, you need to call primitive() or generate_3d() manually with parameters in parts.
                 # in the function, the above 3D editing APIs are used to assemble each part into the whole tool.
-                # the function should export 3D assets of the tool into one or more obj files, each asset should be on the x-y plane.
+                # the function must export at least one .stl asset (can additionally export .obj), each asset should be on the x-y plane.
                 # the function returns a list of file names of the exported 3D assets.
         """ 
     "placement_func": a complete python code to place the tool in the scene.
@@ -189,17 +189,18 @@ To describe a generated tool, you will use a json format. Here is an example:
             def placement():
                 self.tool = scene.add_entity(
                     gs.Morph.Mesh(
-                        filename="tool.obj",
+                        filename="tool.stl",
                         pos=(0.0,0.0,0.0),
                         euler=(0,0,0),
                         scale=(1,1,1),
                     )
                 )
-                # the filename here should match that saved in assemble_func, and the position, rotation and scale should be approprate to be here.
+                # the filename here should match a generated mesh from assemble_func (.stl or .obj), and the position, rotation and scale should be approprate to be here.
         """
 }
 ```
 
 You should make sure:
 The tool is saved. All the 3D editing functions in assembly func have return values, which should be received.
+In `placement_func`, `filename` must refer to an existing mesh file returned by `assemble_func`; `.stl` and `.obj` are both allowed.
 $TIPS_FOR_DESIGNER$
