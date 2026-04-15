@@ -10,7 +10,7 @@ class LiftREnv(RenderEnv):
     def add_entities(self):
         self.bowl = self.scene.add_entity(
             morph=gs.morphs.Mesh(
-                file="simplify_simplify_bowl.obj",
+                file=self.task_asset("simplify_simplify_bowl.obj"),
                 scale=0.09,
                 pos=(0.35, 0.3, 0.05+self.desk_height),
                 euler=(90, 0, 90),
@@ -26,7 +26,7 @@ class LiftREnv(RenderEnv):
         )
         self.tool = self.scene.add_entity(
             morph=gs.morphs.Mesh(
-                file="bowl_lifting_tool_2.obj",
+                file=self.task_asset("bowl_lifting_tool_2.obj"),
                 scale=1.7,
                 pos=(0.2, 0.3, 0.026+self.desk_height),
                 euler=(90, 0, 0),

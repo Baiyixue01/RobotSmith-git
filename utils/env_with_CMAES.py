@@ -1,10 +1,10 @@
 import genesis as gs
+from genesis.constants import backend as gs_backend
 import imageio
 import torch
 import numpy as np
 import open3d as o3d
 from scipy.spatial.transform import Rotation as R
-from genesis.engine.entities import MPMEntity
 import os 
 import cma
 import json
@@ -12,11 +12,11 @@ import matplotlib.pyplot as plt
 
 
 class CMAESOptimizer():
-    project_path = os.path.dirname(os.path.join(os.path.abspath(__file__), '..'))
+    project_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     def __init__(self, task, scene=None, GUI=False, log_dir=None):
         self.task = task
         self.GUI = GUI
-        gs.init()
+        gs.init(backend=gs_backend.cpu)
         if scene is None:
             self.scene = gs.Scene(
                 sim_options=gs.options.SimOptions(
@@ -47,7 +47,8 @@ class CMAESOptimizer():
                 file='{}/assets/xarm7_with_gripper_reduced_dof.urdf'.format(self.project_path), 
                 fixed=True, 
                 collision=True, 
-                links_to_keep=["link_tcp"]),
+                links_to_keep=["link_tcp"],
+                recompute_inertia=True),
         )
         self.cam = self.scene.add_camera(
             pos=(1.5,0.0,1.5), lookat=(0.0,0.0,0.5), fov=50, res=(1440,1440), GUI=False,

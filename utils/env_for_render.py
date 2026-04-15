@@ -1,4 +1,5 @@
 import genesis as gs
+from genesis.constants import backend as gs_backend
 import imageio
 import torch
 import numpy as np
@@ -45,6 +46,9 @@ class RenderEnv():
     project_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     def __init__(self, task):
         self.task = task
+
+        self.task_path = os.path.join(self.project_path, self.task)
+        scene_kwargs = dict(
         # gs.init()
         gs.init(backend=gs.cpu)
         self.scene = gs.Scene(
@@ -145,6 +149,9 @@ class RenderEnv():
         log_dir = os.path.join(self.project_path, self.task, 'try')
         os.makedirs(log_dir, exist_ok=True)
         self.img_save_dir = log_dir
+
+    def task_asset(self, file_name):
+        return os.path.join(self.task_path, file_name)
         
     def init_mass(self, mass=0.015):
         for entity in self.scene.sim.rigid_solver.entities[2:]:

@@ -10,7 +10,7 @@ class FlatenREnv(RenderEnv):
     def add_entities(self):
         self.tool = self.scene.add_entity(
             morph = gs.morphs.Mesh(
-                file="tool.obj",
+                file=self.task_asset("tool.obj"),
                 scale=0.4,
                 pos=(0.48, 0.415, 0.15+self.desk_height),
                 euler=(180, 0, -90),
@@ -163,7 +163,6 @@ env.tool.set_dofs_kv(np.array([50, 50, 50, 20, 20, 20]) * 1.4 * 10)
 env.scene.visualizer.update()
 env.save_gallery_img()
 env.save_trajectory_img()
-
 
 
 

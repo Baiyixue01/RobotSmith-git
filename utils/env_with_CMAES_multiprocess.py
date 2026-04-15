@@ -4,7 +4,6 @@ import torch
 import numpy as np
 import open3d as o3d
 from scipy.spatial.transform import Rotation as R
-from genesis.engine.entities import MPMEntity
 import os 
 import cma
 import json
@@ -12,7 +11,7 @@ import matplotlib.pyplot as plt
 
 
 class CMAESOptimizerMulti():
-    project_path = os.path.dirname(os.path.join(os.path.abspath(__file__), '..'))
+    project_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     def __init__(self, task, scene=None):
         self.task = task
         
@@ -48,7 +47,7 @@ class CMAESOptimizerMulti():
     def create_log_dir(self):
         log_dir = os.path.join(self.project_path, self.task, 'try')
         os.makedirs(log_dir, exist_ok=True)
-        n_tries = len([fil for fil in os.listdir('try') if not '.' in fil])
+        n_tries = len([fil for fil in os.listdir(log_dir) if not '.' in fil])
         self.img_save_dir = os.path.join(log_dir, f"{n_tries:03d}")
         os.makedirs(self.img_save_dir, exist_ok=True)
         os.makedirs(os.path.join(self.img_save_dir, "opt_log"), exist_ok=True)

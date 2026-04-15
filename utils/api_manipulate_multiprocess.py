@@ -6,7 +6,6 @@ import numpy as np
 import trimesh
 import open3d as o3d
 from scipy.spatial.transform import Rotation as R
-from genesis.engine.entities import MPMEntity
 
 def euler_to_quat(euler, degree=True):
     if degree:
@@ -218,6 +217,9 @@ def sample_points_on_mesh(vertices, faces, num_samples):
     sampled_points, face_indices = trimesh.sample.sample_surface(mesh, num_samples)
     return sampled_points
 
+def is_mpm_entity(obj):
+    return hasattr(obj, "get_particles") and hasattr(obj, "set_pos")
+
 def my_grasp(scene, robotarm, obj, save_img, restriction_x = None, restriction_y = None, restriction_z = None, grasp_quat=None, filename=None, verbose=False):
     '''
     Args:
@@ -248,7 +250,7 @@ def my_grasp(scene, robotarm, obj, save_img, restriction_x = None, restriction_y
         return
     
     com = None
-    if isinstance(obj, MPMEntity):
+    if is_mpm_entity(obj):
         particles = obj.get_particles()
         org_obj_qpos = particles.mean(axis=0)
         xmn, xmx = particles[:, 0].min(), particles[:, 0].max()
@@ -280,7 +282,7 @@ def my_grasp(scene, robotarm, obj, save_img, restriction_x = None, restriction_y
 
     q_xarm = robotarm.get_dofs_position()
     def reset_obj():
-        if isinstance(obj, MPMEntity):
+        if is_mpm_entity(obj):
             obj.set_pos(0, particles)
             robotarm.set_dofs_position(q_xarm)
             scene.step()
