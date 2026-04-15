@@ -28,6 +28,10 @@ import argparse
 argparser = argparse.ArgumentParser()
 argparser.add_argument('--task_name', type=str)
 argparser.add_argument('--task_prompt_json_dir', type=str)
+argparser.add_argument('--designer_source', type=str, default='azure')
+argparser.add_argument('--critic_source', type=str, default='azure')
+argparser.add_argument('--designer_lm_id', type=str, default='o3-mini')
+argparser.add_argument('--critic_lm_id', type=str, default='gpt-4o')
 args = argparser.parse_args()
 
 
@@ -334,22 +338,28 @@ class Generator:
             outputs = self.lora_model.generate(**inputs, max_length=max_tokens)
         return self.processor.decode(outputs[0], skip_special_tokens=True)
 
-designer = Generator(
-    lm_source='azure',
-    lm_id='o3-mini',
-    max_tokens=16000,
-    temperature=0.7,
-    top_p=1.0,
-    logger=None
-)
-critic = Generator(
-    lm_source='azure',
-    lm_id='gpt-4o',
-    max_tokens=16000,
-    temperature=0.7,
-    top_p=1.0,
-    logger=None
-)
+designer = None
+critic = None
+
+
+def init_agents(designer_source='azure', critic_source='azure', designer_lm_id='o3-mini', critic_lm_id='gpt-4o'):
+    global designer, critic
+    designer = Generator(
+        lm_source=designer_source,
+        lm_id=designer_lm_id,
+        max_tokens=16000,
+        temperature=0.7,
+        top_p=1.0,
+        logger=None
+    )
+    critic = Generator(
+        lm_source=critic_source,
+        lm_id=critic_lm_id,
+        max_tokens=16000,
+        temperature=0.7,
+        top_p=1.0,
+        logger=None
+    )
 
 def parse_json(prompt, response, last_call=False):
     json_str = None
@@ -407,6 +417,58 @@ def write_design_code(filename, tool_json):
 
     with open(filename, 'w') as fo:
         fo.write(outp)
+
+
+ALLOWED_CALL_ROOTS = {
+    "primitive", "generate_3d", "rotate_to_align", "trimesh", "assemble",
+    "len", "range", "float", "int", "str", "list", "dict", "tuple", "set",
+    "abs", "min", "max", "sum", "enumerate", "zip"
+}
+BLOCKED_ROOTS = {
+    "os", "subprocess", "socket", "requests", "urllib", "http", "https",
+    "ftplib", "telnetlib", "paramiko"
+}
+BLOCKED_ATTRS = {
+    "system", "popen", "Popen", "run", "call", "check_output", "urlopen",
+    "get", "post", "put", "delete", "request"
+}
+
+
+def _get_call_root(node):
+    cur = node
+    while isinstance(cur, ast.Attribute):
+        cur = cur.value
+    if isinstance(cur, ast.Name):
+        return cur.id
+    return None
+
+
+def static_validate_assemble_func(assemble_func):
+    try:
+        tree = ast.parse(assemble_func)
+    except SyntaxError as e:
+        return False, f"Syntax error in assemble_func: {e}"
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            return False, "Import statements are not allowed in assemble_func."
+        if isinstance(node, ast.Call):
+            root = _get_call_root(node.func)
+            if root in BLOCKED_ROOTS:
+                return False, f"Blocked callable root detected: {root}"
+            if isinstance(node.func, ast.Attribute) and node.func.attr in BLOCKED_ATTRS:
+                return False, f"Blocked callable attribute detected: {node.func.attr}"
+            if isinstance(node.func, ast.Name) and root is not None and root not in ALLOWED_CALL_ROOTS:
+                return False, f"Call root not in whitelist: {root}"
+        if isinstance(node, ast.Attribute) and node.attr in BLOCKED_ATTRS:
+            return False, f"Blocked attribute access detected: {node.attr}"
+        if isinstance(node, ast.Name) and node.id in BLOCKED_ROOTS:
+            return False, f"Blocked module reference detected: {node.id}"
+    return True, "assemble_func passed static whitelist validation"
+
+
+def append_execution_log(log_dir, message):
+    with open(os.path.join(log_dir, "execution.log"), "a") as f:
+        f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {message}\n")
 
 def look_at(cam_pos, target=np.array([0, 0, 0]), up=np.array([0, 0, 1])):
     forward = (target - cam_pos)
@@ -566,7 +628,17 @@ def render_and_save_with_genesis(mesh_path, output_folder, num_views=10):
 
 
 
-def run_tool_design(task_name, task_prompt_json_dir):
+def run_tool_design(task_name, task_prompt_json_dir, designer_source='azure', critic_source='azure', designer_lm_id='o3-mini', critic_lm_id='gpt-4o'):
+    init_agents(
+        designer_source=designer_source,
+        critic_source=critic_source,
+        designer_lm_id=designer_lm_id,
+        critic_lm_id=critic_lm_id
+    )
+    append_execution_log(
+        log_dir,
+        f"Initialized agents: designer=({designer_source}, {designer_lm_id}), critic=({critic_source}, {critic_lm_id})"
+    )
     
     designer_prompt =  open(os.path.join(project_path, 'utils', 'template_tool_design.txt'), 'r').read()
     designer_prompt_json = json.load(open(task_prompt_json_dir, 'r'))
@@ -584,11 +656,17 @@ def run_tool_design(task_name, task_prompt_json_dir):
     }]
     while critic_cnt <= 5:
         critic_cnt += 1
+        designer_response_parsed = None
         try:
             designer_response = parse_json(designer_prompt, designer_response)
+            designer_response_parsed = designer_response
             json_filename = os.path.join(log_dir, f"design{critic_cnt}.json")
             json.dump(designer_response, open(json_filename, 'w'), indent=4)
             code_filename = os.path.join(log_dir, f"design{critic_cnt}.py")
+            is_safe, safety_msg = static_validate_assemble_func(designer_response.get("assemble_func", ""))
+            append_execution_log(log_dir, f"[critic {critic_cnt}] static validation: {safety_msg}")
+            if not is_safe:
+                raise ValueError(f"Static whitelist check failed: {safety_msg}")
             write_design_code(code_filename, designer_response)
             
             design_chat_history.append({
@@ -596,17 +674,38 @@ def run_tool_design(task_name, task_prompt_json_dir):
                 'content': json.dumps(designer_response)
             })
 
-            result = subprocess.run(
-                ["python3", code_filename],
-                capture_output=True,
-                text=True,
-                timeout=300
+            start_time = time.perf_counter()
+            try:
+                result = subprocess.run(
+                    ["python3", code_filename],
+                    capture_output=True,
+                    text=True,
+                    timeout=300
+                )
+            except subprocess.TimeoutExpired as e:
+                duration = time.perf_counter() - start_time
+                append_execution_log(
+                    log_dir,
+                    f"[critic {critic_cnt}] timeout after {duration:.2f}s (limit={e.timeout}s)"
+                )
+                raise
+            duration = time.perf_counter() - start_time
+            append_execution_log(
+                log_dir,
+                f"[critic {critic_cnt}] exec duration={duration:.2f}s, returncode={result.returncode}, stderr={result.stderr.strip()[:1000]}"
             )
             if result.returncode != 0:
                 raise Exception(f"Error in subprocess: {result.stderr}")
             print(result.stdout)
             output_files = ast.literal_eval(result.stdout)
             assert isinstance(output_files, list), "Output files should be a list"
+            missing_files = [f for f in output_files if not os.path.exists(f)]
+            append_execution_log(
+                log_dir,
+                f"[critic {critic_cnt}] output files={output_files}, missing={missing_files}"
+            )
+            if missing_files:
+                raise FileNotFoundError(f"Generated output files are missing: {missing_files}")
             os.system(f"mkdir {log_dir}/{critic_cnt}")
             
             imgs = []
@@ -636,8 +735,26 @@ def run_tool_design(task_name, task_prompt_json_dir):
             })
 
         except Exception as e:
-            print(f"Error in critic {critic_cnt}: {e} with traceback: {traceback.format_exc()}")
-            break
+            err_summary = f"Error in critic {critic_cnt}: {e}"
+            append_execution_log(log_dir, f"{err_summary}\n{traceback.format_exc()}")
+            print(f"{err_summary} with traceback: {traceback.format_exc()}")
+            if designer_response_parsed is not None:
+                fallback_json_filename = os.path.join(log_dir, f"design{critic_cnt}_failed.json")
+                json.dump(designer_response_parsed, open(fallback_json_filename, 'w'), indent=4)
+            with open(os.path.join(log_dir, f"error_summary_{critic_cnt}.txt"), 'w') as fo:
+                fo.write(err_summary + "\n")
+                fo.write(traceback.format_exc())
+            designer_prompt = (
+                "The previous tool design failed during static validation or execution. "
+                f"Failure summary: {err_summary}. "
+                "Please repair the JSON design and provide a corrected version."
+            )
+            design_chat_history.append({
+                'role': 'user',
+                'content': designer_prompt
+            })
+            designer_response = designer.generate(prompt=designer_prompt, img=None, json_mode=False, chat_history=design_chat_history)
+            continue
 
     planing_chat_history = [design_chat_history[0], design_chat_history[-1]]
     planing_prompt = open(os.path.join(project_path, 'utils', 'template_manipulate.txt'), 'r').read()
@@ -651,4 +768,11 @@ def run_tool_design(task_name, task_prompt_json_dir):
 
 if __name__ == "__main__":
 
-    run_tool_design(task_name=args.task_name, task_prompt_json_dir=args.task_prompt_json_dir)
+    run_tool_design(
+        task_name=args.task_name,
+        task_prompt_json_dir=args.task_prompt_json_dir,
+        designer_source=args.designer_source,
+        critic_source=args.critic_source,
+        designer_lm_id=args.designer_lm_id,
+        critic_lm_id=args.critic_lm_id
+    )

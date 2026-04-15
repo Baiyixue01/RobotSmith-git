@@ -3,6 +3,7 @@ from skimage import measure
 import trimesh
 import open3d as o3d
 import igl
+from utils.local_cad_backend import text_to_mesh
 
 def primitive(primitive_name, primitive_scale):
     """
@@ -445,41 +446,24 @@ import numpy as np
 
 import trimesh
 import os
-project_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-meshy_api_key = ''
-with open(os.path.join(project_path, 'meshy_api_key.txt')) as fi:
-    meshy_api_key = fi.readlines()[0]
 
 def generate_3d(name):
-    import io
-    import json
-    import requests
-    import subprocess
+    backend = os.getenv("TOOL_GEN_BACKEND", "opcad").strip().lower()
+    if backend not in {"opcad", "meshy"}:
+        raise ValueError(f"Unsupported TOOL_GEN_BACKEND='{backend}'. Expected 'opcad' or 'meshy'.")
 
-    cmd1 =   "curl https://api.meshy.ai/openapi/v2/text-to-3d " + \
-            "  -H \'Authorization: Bearer {}\' ".format(meshy_api_key) + \
-            "  -H \'Content-Type: application/json\' " + \
-            "  -d \'{\n" + \
-            "  \"mode\": \"preview\",\n" + \
-            "  \"prompt\": \"{}\",\n".format(name) + \
-            "  \"art_style\": \"realistic\",\n" + \
-            "  \"should_remesh\": true\n" + \
-            "}\'\n" 
-    result = subprocess.run(cmd1, shell=True, capture_output=True, text=True)
-    task_id = json.loads(result.stdout)['result']
-    # task_id = "0195c83d-6d69-7826-ac1f-e97aa7ba7541"
-    
-    cmd2 = "curl https://api.meshy.ai/openapi/v2/text-to-3d/{} ".format(task_id) + \
-            "-H \"Authorization: Bearer {}\" ".format(meshy_api_key)
-    result = subprocess.run(cmd2, shell=True, capture_output=True, text=True)
-    output = json.loads(result.stdout)
-    while not output['status'] == 'SUCCEEDED':
-        print("Waiting for meshy to finish...")
-        result = subprocess.run(cmd2, shell=True, capture_output=True, text=True)
-        output = json.loads(result.stdout)
-    mesh_file = output['model_urls']['obj']
-    
-    response = requests.get(mesh_file)
-    mesh = trimesh.load(io.BytesIO(response.content), file_type='obj')
-    
+    if backend == "meshy":
+        raise RuntimeError(
+            "TOOL_GEN_BACKEND=meshy is deprecated in this runtime. "
+            "Please use local backend (opcad) or register a remote adapter."
+        )
+
+    mesh = text_to_mesh(name)
+    if mesh is None:
+        raise RuntimeError("generate_3d() failed: backend returned None.")
+    if not isinstance(mesh, trimesh.Trimesh):
+        raise TypeError(f"generate_3d() expected trimesh.Trimesh, got {type(mesh)}.")
+    if len(mesh.vertices) == 0 or len(mesh.faces) == 0:
+        raise RuntimeError("generate_3d() failed: backend returned an empty mesh.")
+
     return mesh
