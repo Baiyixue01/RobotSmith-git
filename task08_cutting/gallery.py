@@ -10,7 +10,7 @@ class CutREnv(RenderEnv):
     def add_entities(self):
         self.tool = self.scene.add_entity(
             morph = gs.morphs.Mesh(
-                file="cutter.obj",
+                file=self.task_asset("cutter.obj"),
                 scale=0.5,
                 pos=(0.28, 0.415, 0.15+self.desk_height),
                 euler=(0, 0, 90),

@@ -445,7 +445,7 @@ import numpy as np
 
 import trimesh
 import os
-project_path = os.path.dirname(os.path.join(os.path.abspath(__file__), '..'))
+project_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 meshy_api_key = ''
 with open(os.path.join(project_path, 'meshy_api_key.txt')) as fi:
     meshy_api_key = fi.readlines()[0]

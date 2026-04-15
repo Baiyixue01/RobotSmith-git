@@ -1,10 +1,10 @@
 import genesis as gs
+from genesis.constants import backend as gs_backend
 import imageio
 import torch
 import numpy as np
 import open3d as o3d
 from scipy.spatial.transform import Rotation as R
-from genesis.engine.entities import MPMEntity
 import os 
 import cma
 import json
@@ -42,11 +42,12 @@ def quat_to_euler(quat):
     return np.array([X, Y, Z])
 
 class RenderEnv():
-    project_path = os.path.dirname(os.path.join(os.path.abspath(__file__), '..'))
+    project_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     def __init__(self, task):
         self.task = task
-        gs.init()
-        self.scene = gs.Scene(
+        self.task_path = os.path.join(self.project_path, self.task)
+        gs.init(backend=gs_backend.cpu)
+        scene_kwargs = dict(
             sim_options=gs.options.SimOptions(
                 dt=2e-4, substeps=1, gravity=(0,0,-9.8),
             ),
@@ -62,21 +63,26 @@ class RenderEnv():
             ),
             vis_options=gs.options.VisOptions(
                 env_separate_rigid = True
-            ),    
-            renderer=gs.renderers.RayTracer(
+            ),
+            show_viewer = False,
+        )
+        try:
+            scene_kwargs["renderer"] = gs.renderers.RayTracer(
                 env_radius=200.0,
                 env_surface=gs.surfaces.Emission(
                     emissive_texture=gs.textures.ImageTexture(
                         image_path=f"{self.project_path}/assets/hdr.hdr",
                         image_color=(0.5, 0.5, 0.5),
+                        encoding="linear",
                     )
                 ),
                 lights=[
                     {'pos': (0, -70, 40), 'color': (255.0, 255.0, 255.0), 'radius': 7, 'intensity': 0.3 * 1.4},
                 ]
-            ),
-            show_viewer = False,
-        )
+            )
+        except Exception:
+            pass
+        self.scene = gs.Scene(**scene_kwargs)
         mat_rigid = gs.materials.Rigid(coup_friction=5.0)#
         self.desk_height = 0.8
         table = self.scene.add_entity(
@@ -129,7 +135,8 @@ class RenderEnv():
                 euler=(0, 0, 90),
                 fixed=True, 
                 collision=False, 
-                links_to_keep=["link_tcp"]),
+                links_to_keep=["link_tcp"],
+                recompute_inertia=True),
         )
         self.cam_gallery = None
         self.cam_trajectory = None
@@ -142,6 +149,9 @@ class RenderEnv():
         log_dir = os.path.join(self.project_path, self.task, 'try')
         os.makedirs(log_dir, exist_ok=True)
         self.img_save_dir = log_dir
+
+    def task_asset(self, file_name):
+        return os.path.join(self.task_path, file_name)
         
     def init_mass(self, mass=0.015):
         for entity in self.scene.sim.rigid_solver.entities[2:]:

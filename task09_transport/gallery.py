@@ -19,7 +19,7 @@ class TransportREnv(RenderEnv):
         self.cup = self.scene.add_entity(
             material=mat_rigid,
             morph = gs.morphs.Mesh(
-                file="simplify_red_cup.obj",
+                file=self.task_asset("simplify_red_cup.obj"),
                 scale=1.0,
                 pos=(0, 0.3, 0.064+self.desk_height),
                 euler=(90, 0, 0),
@@ -36,7 +36,7 @@ class TransportREnv(RenderEnv):
         self.tank = self.scene.add_entity(
             material=mat_rigid,
             morph = gs.morphs.Mesh(
-                file='simplify_tank.obj',
+                file=self.task_asset("simplify_tank.obj"),
                 scale=0.3,
                 pos=(0.1, 0.6, 0.07+self.desk_height),
                 euler=(90, 0, 90),
@@ -79,7 +79,7 @@ class TransportREnv(RenderEnv):
         self.tool = self.scene.add_entity(
             material=mat_rigid,
             morph = gs.morphs.Mesh(
-                file="solidify_tool_2.obj",
+                file=self.task_asset("solidify_tool_2.obj"),
                 scale=1.3,
                 pos=(0.3, 0.3, 0.2+self.desk_height),
                 euler=(90, 0, 90),
