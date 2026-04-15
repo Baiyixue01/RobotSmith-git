@@ -24,3 +24,5 @@ blenderkit/tools/*.obj
 baseline-meshy/*
 
 ext/Genesis/ext/*
+*tar*
+*pyc

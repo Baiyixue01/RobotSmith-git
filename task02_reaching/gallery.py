@@ -29,7 +29,7 @@ class ReachingREnv(RenderEnv):
         self.tool = self.scene.add_entity(
             material=gs.materials.Rigid(friction = 5.0),
             morph = gs.morphs.Mesh(
-                file="tool_2.obj",
+                file=f"{self.project_path}/task02_reaching/tool_2.stl",
                 scale=1.0,
                 pos=(0.2, 0.2, 0.2 + self.desk_height),
                 euler=(90, 0, 90),

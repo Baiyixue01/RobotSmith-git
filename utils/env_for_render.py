@@ -4,7 +4,7 @@ import torch
 import numpy as np
 import open3d as o3d
 from scipy.spatial.transform import Rotation as R
-from genesis.engine.entities import MPMEntity
+# from genesis.engine.entities import MPMEntity
 import os 
 import cma
 import json
@@ -42,10 +42,11 @@ def quat_to_euler(quat):
     return np.array([X, Y, Z])
 
 class RenderEnv():
-    project_path = os.path.dirname(os.path.join(os.path.abspath(__file__), '..'))
+    project_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     def __init__(self, task):
         self.task = task
-        gs.init()
+        # gs.init()
+        gs.init(backend=gs.cpu)
         self.scene = gs.Scene(
             sim_options=gs.options.SimOptions(
                 dt=2e-4, substeps=1, gravity=(0,0,-9.8),
@@ -63,18 +64,19 @@ class RenderEnv():
             vis_options=gs.options.VisOptions(
                 env_separate_rigid = True
             ),    
-            renderer=gs.renderers.RayTracer(
-                env_radius=200.0,
-                env_surface=gs.surfaces.Emission(
-                    emissive_texture=gs.textures.ImageTexture(
-                        image_path=f"{self.project_path}/assets/hdr.hdr",
-                        image_color=(0.5, 0.5, 0.5),
-                    )
-                ),
-                lights=[
-                    {'pos': (0, -70, 40), 'color': (255.0, 255.0, 255.0), 'radius': 7, 'intensity': 0.3 * 1.4},
-                ]
-            ),
+            # renderer=gs.renderers.RayTracer(
+            #     env_radius=200.0,
+            #     env_surface=gs.surfaces.Emission(
+            #     emissive_texture=gs.textures.ImageTexture(
+            #         image_path=f"{self.project_path}/assets/hdr.hdr",
+            #         image_color=(0.5, 0.5, 0.5),
+            #         encoding="linear",
+            #     )
+            #     ),
+            #     lights=[
+            #         {'pos': (0, -70, 40), 'color': (255.0, 255.0, 255.0), 'radius': 7, 'intensity': 0.3 * 1.4},
+            #     ]
+            # ),
             show_viewer = False,
         )
         mat_rigid = gs.materials.Rigid(coup_friction=5.0)#
@@ -129,7 +131,8 @@ class RenderEnv():
                 euler=(0, 0, 90),
                 fixed=True, 
                 collision=False, 
-                links_to_keep=["link_tcp"]),
+                links_to_keep=["link_tcp"],
+                recompute_inertia=True,),
         )
         self.cam_gallery = None
         self.cam_trajectory = None
