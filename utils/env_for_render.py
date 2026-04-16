@@ -145,6 +145,9 @@ class RenderEnv():
         log_dir = os.path.join(self.project_path, self.task, 'try')
         os.makedirs(log_dir, exist_ok=True)
         self.img_save_dir = log_dir
+
+    def task_asset(self, filename):
+        return os.path.join(self.project_path, self.task, filename)
         
     def init_mass(self, mass=0.015):
         for entity in self.scene.sim.rigid_solver.entities[2:]:
