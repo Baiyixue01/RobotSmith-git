@@ -20,8 +20,24 @@ import subprocess
 import open3d as o3d
 import numpy as np
 import math
+import importlib.util
 
 project_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+
+
+def _load_module_by_path(module_name, file_path):
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load module {module_name} from {file_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_opcad_prompt_mod = _load_module_by_path(
+    "opcad_prompt_mod", os.path.join(project_path, "utils", "op-cad", "prompt.py")
+)
+build_incremental_cq_prompt = _opcad_prompt_mod.build_incremental_cq_prompt
 
 import argparse
 
@@ -426,43 +442,107 @@ Perform the following operation **as a continuation** of the existing model:
 
 """.strip()
         return incremental_prompt
+
+
+def _strip_markdown_fence(text):
+    if text is None:
+        return ""
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```[a-zA-Z0-9_+-]*\n?", "", text)
+        text = re.sub(r"\n?```$", "", text)
+    return text.strip()
+
+
+def _result_var_name(step_id):
+    return f"result_{step_id}"
+
+
+def _build_opcad_step_prompt(previous_code, step_id, instruction):
+    current_var = None if step_id == 0 else _result_var_name(step_id - 1)
+    next_var = _result_var_name(step_id)
+    return build_incremental_cq_prompt(
+        previous_code=previous_code or "",
+        operation_instruction=instruction,
+        current_var_name=current_var,
+        next_var_name=next_var,
+        allow_comments=False,
+        add_size_guidelines=True,
+        op_kind=f"tool_mesh_step_{step_id}",
+    )
+
+
+def _finalize_assemble_func_to_stl(assemble_func_code):
+    cleaned = _strip_markdown_fence(assemble_func_code).rstrip()
+    if "def assemble(" not in cleaned:
+        raise ValueError("Generated assemble code must contain `def assemble(parts):`")
+    if "return mesh_files" in cleaned:
+        cleaned = cleaned.replace("return mesh_files", "return _ensure_stl_outputs(mesh_files)")
+    elif "return filenames" in cleaned:
+        cleaned = cleaned.replace("return filenames", "return _ensure_stl_outputs(filenames)")
+    elif re.search(r"\breturn\s+\[", cleaned):
+        cleaned = re.sub(r"\breturn\s+(.+)$", r"return _ensure_stl_outputs(\1)", cleaned, count=1, flags=re.M)
+    else:
+        cleaned += "\n\n    return _ensure_stl_outputs(mesh_files)"
+
+    stl_helper = """
+
+def _ensure_stl_outputs(paths):
+    normalized = []
+    for p in paths:
+        ext = "." + p.rsplit(".", 1)[-1].lower() if "." in p else ""
+        if ext == ".stl":
+            normalized.append(p)
+            continue
+        mesh = trimesh.load(p, force='mesh')
+        if isinstance(mesh, trimesh.Scene):
+            mesh = trimesh.util.concatenate([g for g in mesh.geometry.values()])
+        stl_path = (p.rsplit(".", 1)[0] if "." in p else p) + ".stl"
+        mesh.export(stl_path)
+        normalized.append(stl_path)
+    return normalized
+""".rstrip()
+    if "def _ensure_stl_outputs(" not in cleaned:
+        cleaned = cleaned + "\n" + stl_helper + "\n"
+    return cleaned
+
+
 def generate_tool_from_steps(tool_json, designer_prompt_json, design_chat_history):
     steps = tool_json.get("construction_steps", None)
+    if not steps:
+        raise ValueError("construction_steps is required for OP-CAD incremental generation")
 
-    
-    step_codegen_history = [{
-        "role": "system",
-        "content": "You are an expert CAD/mesh code generator for deterministic incremental edits."
-    }]
-    for i, step in enumerate(steps, start=1):
-        prompt = incremental_prompt_template.format(
-            goal=designer_prompt_json.get("GOAL_DESCRIPTION", ""),
-            obj_desc=designer_prompt_json.get("3D_OBJECT_DESCRIPTION", ""),
-            step_idx=i,
-            step_total=len(steps),
-            step_json=json.dumps(step, ensure_ascii=False, indent=2),
-            parts_json=json.dumps(tool_json.get("parts", []), ensure_ascii=False, indent=2),
-            previous_code=current_code
+    current_code = """
+def assemble(parts):
+    mesh_files = []
+""".strip()
+
+    for step in steps:
+        step_id = int(step.get("step_id", 0))
+        instruction = step.get("Instruction", "")
+        prompt = _build_opcad_step_prompt(
+            previous_code=current_code,
+            step_id=step_id,
+            instruction=instruction,
         )
-        step_codegen_history.append({"role": "user", "content": prompt})
         llm_response = designer.generate(
             prompt=prompt,
             img=None,
             json_mode=False,
-            chat_history=step_codegen_history
+            chat_history=None
         )
         next_code = parse_code_block(llm_response, language_hint="python")
+        next_code = _strip_markdown_fence(next_code)
         is_safe, safety_msg = static_validate_assemble_func(next_code)
-        append_execution_log(log_dir, f"[step_codegen {i}] static validation: {safety_msg}")
+        append_execution_log(log_dir, f"[step_codegen {step_id}] static validation: {safety_msg}")
         if not is_safe:
-            raise ValueError(f"Step {i} generated unsafe assemble code: {safety_msg}")
+            raise ValueError(f"Step {step_id} generated unsafe assemble code: {safety_msg}")
         current_code = next_code
-        step_codegen_history.append({"role": "assistant", "content": f"```python\n{current_code}\n```"})
         design_chat_history.append({
             "role": "assistant",
-            "content": f"Step {i} updated assemble code."
+            "content": f"Step {step_id} updated assemble code."
         })
-    return current_code
+    return _finalize_assemble_func_to_stl(current_code)
 
 
 def write_design_code(filename, tool_json):
