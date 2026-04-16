@@ -2,6 +2,23 @@ import numpy as np
 import genesis as gs
 from utils.env_for_render import RenderEnv, euler_to_quat, quat_to_euler
 
+
+def trans_quat_to_T(pos, quat):
+    """Build a 4x4 transform matrix from position and quaternion (w, x, y, z)."""
+    w, x, y, z = quat
+    rot = np.array(
+        [
+            [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+            [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+            [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+        ]
+    )
+    T = np.eye(4)
+    T[:3, :3] = rot
+    T[:3, 3] = pos
+    return T
+
+
 class CutREnv(RenderEnv):
     def __init__(self, task='task08_cutting'):
         super().__init__(task)
@@ -100,15 +117,13 @@ env.scene.visualizer.update()
 env.save_gallery_img()
 env.save_trajectory_img()
 
-import genesis.utils.geometry_utils as gu
-
 tool_pos = env.tool.get_pos().cpu().numpy()
 tool_quat = env.tool.get_quat().cpu().numpy()
-tool_T = gu.trans_quat_to_T(tool_pos, tool_quat)
+tool_T = trans_quat_to_T(tool_pos, tool_quat)
 
 ee_pos = env.xarm.get_link("link_tcp").get_pos().cpu().numpy()
 ee_quat = env.xarm.get_link("link_tcp").get_quat().cpu().numpy()
-ee_T = gu.trans_quat_to_T(ee_pos, ee_quat)
+ee_T = trans_quat_to_T(ee_pos, ee_quat)
 ee_rel_T = np.linalg.inv(tool_T) @ ee_T
 
 env.tool.set_dofs_velocity((0, 0, -1.0, 0, 0, 0))
