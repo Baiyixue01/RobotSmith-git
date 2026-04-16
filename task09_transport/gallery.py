@@ -1,5 +1,6 @@
 import numpy as np
 import genesis as gs
+from pathlib import Path
 from utils.env_for_render import RenderEnv, euler_to_quat, quat_to_euler
 
 class TransportREnv(RenderEnv):
@@ -149,7 +150,13 @@ q_xarm, err = env.xarm.inverse_kinematics(
 q_xarm[-2:] = 0.015
 env.xarm.set_dofs_position(q_xarm)
 env.xarm.control_dofs_position(q_xarm)
-water0 = np.load('water0.npy')
+water0_path = Path(__file__).with_name("water0.npy")
+if water0_path.exists():
+    water0 = np.load(water0_path)
+else:
+    water0 = env.water.get_pos().cpu().numpy()
+    np.save(water0_path, water0)
+    print(f"[gallery] generated '{water0_path.name}' from runtime initial water particles.")
 
 q_tool = np.array([0.01, 0.20, 1.05, 0, 90, 90])
 q_tool[3:] = np.deg2rad(q_tool[3:])
