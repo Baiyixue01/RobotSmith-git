@@ -1,6 +1,36 @@
 import numpy as np
 import genesis as gs
+from pathlib import Path
 from utils.env_for_render import RenderEnv, euler_to_quat, quat_to_euler
+
+
+def load_or_generate_water_positions(num_particles, bottle_center, desk_height):
+    """Load cached particle positions; generate a deterministic fallback when absent."""
+    task_dir = Path(__file__).resolve().parent
+    search_paths = [
+        Path.cwd() / "water.npy",
+        task_dir / "water.npy",
+    ]
+
+    for water_path in search_paths:
+        if water_path.exists():
+            return np.load(water_path)
+
+    # Fallback: sample a compact cylinder of particles inside the bottle.
+    # Dimensions are tuned for this scene's bottle placement.
+    rng = np.random.default_rng(0)
+    radius = 0.018
+    z_min = desk_height + 0.82
+    z_max = desk_height + 1.02
+
+    n = int(num_particles)
+    theta = rng.uniform(0.0, 2.0 * np.pi, n)
+    r = radius * np.sqrt(rng.uniform(0.0, 1.0, n))
+    z = rng.uniform(z_min, z_max, n)
+
+    x = bottle_center[0] + r * np.cos(theta)
+    y = bottle_center[1] + r * np.sin(theta)
+    return np.stack([x, y, z], axis=1)
 
 class FillREnv(RenderEnv):
     def __init__(self, task='task05_waterfill'):
@@ -171,7 +201,11 @@ q_cup[3:] = np.deg2rad(q_cup[3:])
 env.cup.set_dofs_position(q_cup)
 env.cup.control_dofs_position(q_cup)
 
-water_pos = np.load('water.npy')
+water_pos = load_or_generate_water_positions(
+    num_particles=9600,
+    bottle_center=np.array([0.0143, 0.5]),
+    desk_height=env.desk_height,
+)
 env.water.set_pos(0, water_pos)
 env.water._solver._kernel_set_particles_active(
     env.water._sim.cur_substep_local,
