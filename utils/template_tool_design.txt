@@ -6,23 +6,8 @@ $3D_CONFIGURATION$
 
 You need to design a tool to help finish the task. 
 
-You have 2 APIs to generate 3D meshes: 
+You have 1 APIs to generate 3D meshes: 
 
-    def primitive(primitive_name, primitive_scale)
-        """
-        Create a 3D primitive mesh, centered at the origin.
-        Args:
-            primitive_name (str): One of {'cube', 'ball', 'cylinder', 'ring', 'tube'}.
-            primitive_scale (list of float):
-                - If cube, [sx, sy, sz]
-                - If ball, [radius]
-                - If cylinder, [radius, height]
-                - If ring, [radius, thickness]
-                - If tube, [radius, length, thickness]
-        Returns:
-            trimesh.Trimesh: The resulting mesh, centered at (0, 0, 0).
-        """
-    
     def generate_3d(name):
         """
         Call a pretrained text-to-3D model to generate a single solid 3D object.

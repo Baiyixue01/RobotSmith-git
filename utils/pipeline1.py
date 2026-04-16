@@ -408,10 +408,8 @@ def parse_code_block(response, language_hint="python"):
             return response[start:end].strip()
     return response.strip()
 
-def generate_assemble_func_from_steps(tool_json, designer_prompt_json, design_chat_history):
+def generate_tool_from_steps(tool_json, designer_prompt_json, design_chat_history):
     steps = tool_json.get("construction_steps", None)
-    if not isinstance(steps, list) or len(steps) == 0:
-        return tool_json.get("assemble_func", "")
 
     incremental_prompt_template = """
 You are writing ONLY Python function code for robotic tool assembly.
@@ -775,7 +773,7 @@ def run_tool_design(task_name, task_prompt_json_dir, designer_source='azure', cr
             designer_response = parse_json(designer_prompt, designer_response)
             designer_response_parsed = designer_response
             if isinstance(designer_response, dict):
-                stepwise_assemble_func = generate_assemble_func_from_steps(
+                stepwise_assemble_func = generate_tool_from_steps(
                     tool_json=designer_response,
                     designer_prompt_json=designer_prompt_json,
                     design_chat_history=design_chat_history
