@@ -159,61 +159,52 @@ The construction decomposition should follow this style:
 Output JSON should follow this structure (schema-style, not a literal fixed instance):
 ```json
 {
-    "name": a string,
+    "name": a string for the name of the tool (e.g., "long-handled spoon"),
+
+    "functional_purpose": a string describing the functional goal of the tool according to the task requirement
+        (e.g., "scoop water from one bucket and pour it into another container"),
+
     "construction_steps": [
         {
+            "step_id": 0,
+            "Instruction": a string describing one decomposed modeling instruction for building the tool
+                (e.g., "Add an elongated rectangular bar handle"),
+            "reason": a one-sentence explanation of why this step helps accomplish the task
+                (e.g., "the robot needs the handle to hold the spoon"),
+            "is_graspable": True/False. If True, the robot arm can grasp this part; otherwise, it cannot
+                (e.g., True)
+        },
+        {
             "step_id": 1,
-            "action": one in ["add", "remove"],
-            "shape": free-form shape description inferred from the task,
-            "parameters": free-form parameters required by this shape,
-            "position": [x, y, z], center position in tool-local coordinates,
-            "rotation_euler_deg": [rx, ry, rz],
-            "reason": one-sentence explanation of why this step helps the task
-        }
-    ],
-    "parts_note": "parts should correspond to intermediate/final components produced by construction_steps (you can think of them as step0/step1/... artifacts).",
-    "parts": [
-        {
-            "part_id": "step0_base",
-            "from_step_id": 1,
-            "geom": one in ['cube', 'ball', 'cylinder', 'ring', 'tube', 'mesh'],
-            "prompt": if "geom" is 'mesh', there is a string representing a text prompt for text-to-3d generation model; otherwise is an empty string,
-            "parameters": if "geom" is 'mesh', the parameters are (lx, ly, lz), the length in x/y/z directions; 
-                        if not, the parameters should be the same as `primitive_scale` in primitive().
-            "is_graspable": True/False, if it is True, then robot arm can grasp this part, otherwise the robot arm cannot grasp.
+            "Instruction": ...,
+            "reason": ...,
+            "is_graspable": ...
         },
-        {
-            ...
-        },
+        ...
     ],
+
     "simulation_properties": {
-        "density": positive float (kg/m^3-like scale),
-        "friction": float in [0, 2],
-        "restitution": float in [0, 1],
+        "density": a positive float (kg/m^3-like scale),
+        "friction": a float in [0, 2],
+        "restitution": a float in [0, 1],
         "is_graspable_default": True/False
     },
-    "assemble_func": optional initial python code. It can be empty string; the runtime may synthesize it from `construction_steps`.
+
+    "placement_func": a complete Python code snippet for placing the tool in the scene.
         """
-            def assemble(parts: list[dict]):
-                ...
-                # the input parameter parts here is a list of dictionaries, you need to call primitive() or generate_3d() manually with parameters in parts.
-                # in the function, the above 3D editing APIs are used to assemble each part into the whole tool.
-                # the function must export at least one .stl asset (can additionally export .obj), each asset should be on the x-y plane.
-                # the function returns a list of file names of the exported 3D assets.
-        """ 
-    "placement_func": a complete python code to place the tool in the scene.
-        """
-            def placement():
-                self.tool = scene.add_entity(
-                    gs.Morph.Mesh(
-                        filename="tool.stl",
-                        pos=(0.0,0.0,0.0),
-                        euler=(0,0,0),
-                        scale=(1,1,1),
-                    )
+        def placement():
+            self.tool = scene.add_entity(
+                gs.Morph.Mesh(
+                    filename="tool.stl",
+                    pos=(0.0, 0.0, 0.0),
+                    euler=(0, 0, 0),
+                    scale=(1, 1, 1),
                 )
-                # the filename here should match a generated mesh from assemble_func (.stl or .obj), and the position, rotation and scale should be approprate to be here.
-                # if the simulator API supports it, use simulation_properties to set friction/restitution/density.
+            )
+            # The filename here should match a generated mesh file (.stl or .obj).
+            # The position, rotation, and scale should be appropriate for the scene.
+            # If supported by the simulator API, use simulation_properties to set density,
+            # friction, and restitution.
         """
 }
 ```
@@ -222,7 +213,6 @@ You should make sure:
 `construction_steps` must be complete and executable in order from 1..N, with no missing step IDs.
 Each step should be atomic, explicit, and machine-readable.
 Do NOT constrain shape design to a fixed closed set; choose shapes according to functional analysis of the task.
-`parts` should map to stepwise construction results (intermediate and/or final), and may be organized as step0/step1/... semantics.
 The tool is saved. All the 3D editing functions in assembly func have return values, which should be received.
 In `placement_func`, `filename` must refer to an existing mesh file returned by `assemble_func`; `.stl` and `.obj` are both allowed.
 $TIPS_FOR_DESIGNER$

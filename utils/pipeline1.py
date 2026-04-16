@@ -408,46 +408,28 @@ def parse_code_block(response, language_hint="python"):
             return response[start:end].strip()
     return response.strip()
 
-def generate_tool_from_steps(tool_json, designer_prompt_json, design_chat_history):
-    steps = tool_json.get("construction_steps", None)
+def get_single_prompt(prompt):
+        incremental_prompt = """
+"### Role\n"
+"You are an expert CAD modeling assistant specialized in CadQuery.\n"
+"Generate ONLY the incremental CadQuery code needed to perform the requested operation, as a continuation of the provided previous code context."
 
-    incremental_prompt_template = """
-You are writing ONLY Python function code for robotic tool assembly.
-Task goal: {goal}
-Scene/object summary: {obj_desc}
-
-You must update the `assemble(parts)` function incrementally according to ONE step.
-Rules:
-1. Return a complete function definition: `def assemble(parts: list[dict]): ...`
-2. Preserve all valid logic from the previous version.
-3. Apply only the requested delta for this step.
-4. Use only the allowed mesh APIs already available in scope:
-   primitive, generate_3d, rotate_to_align, get_position, get_axis_align_bounding_box,
-   get_volume, rescale, move, empty_grid, add_mesh, sub_mesh, cut_grid, grid_to_mesh.
-5. Final function must export at least one .stl mesh and return a list of filenames.
-6. Do not import modules and do not execute code outside the function.
-7. Output ONLY the python code block for the function.
-
-Current step index: {step_idx}/{step_total}
-Current step JSON:
-{step_json}
-
-Current parts JSON:
-{parts_json}
-
-Previous `assemble` function:
+### Context (already executed Python code)
 ```python
 {previous_code}
 ```
-""".strip()
 
-    current_code = """def assemble(parts: list[dict]):
-    grid = empty_grid()
-    tool_mesh = grid_to_mesh(grid)
-    tool_filename = "tool.stl"
-    tool_mesh.export(tool_filename)
-    return [tool_filename]
-"""
+### Instruction
+Perform the following operation **as a continuation** of the existing model:
+> {operation_instruction}
+
+
+""".strip()
+        return incremental_prompt
+def generate_tool_from_steps(tool_json, designer_prompt_json, design_chat_history):
+    steps = tool_json.get("construction_steps", None)
+
+    
     step_codegen_history = [{
         "role": "system",
         "content": "You are an expert CAD/mesh code generator for deterministic incremental edits."
