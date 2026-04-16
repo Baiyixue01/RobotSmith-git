@@ -392,6 +392,98 @@ def parse_json(prompt, response, last_call=False):
             return parse_json(None, data, last_call=True)
     return response
 
+def parse_code_block(response, language_hint="python"):
+    if response is None:
+        return None
+    fence = f"```{language_hint}"
+    if fence in response:
+        start = response.find(fence) + len(fence)
+        end = response.find("```", start)
+        if end != -1:
+            return response[start:end].strip()
+    if "```" in response:
+        start = response.find("```") + 3
+        end = response.find("```", start)
+        if end != -1:
+            return response[start:end].strip()
+    return response.strip()
+
+def generate_assemble_func_from_steps(tool_json, designer_prompt_json, design_chat_history):
+    steps = tool_json.get("construction_steps", None)
+    if not isinstance(steps, list) or len(steps) == 0:
+        return tool_json.get("assemble_func", "")
+
+    incremental_prompt_template = """
+You are writing ONLY Python function code for robotic tool assembly.
+Task goal: {goal}
+Scene/object summary: {obj_desc}
+
+You must update the `assemble(parts)` function incrementally according to ONE step.
+Rules:
+1. Return a complete function definition: `def assemble(parts: list[dict]): ...`
+2. Preserve all valid logic from the previous version.
+3. Apply only the requested delta for this step.
+4. Use only the allowed mesh APIs already available in scope:
+   primitive, generate_3d, rotate_to_align, get_position, get_axis_align_bounding_box,
+   get_volume, rescale, move, empty_grid, add_mesh, sub_mesh, cut_grid, grid_to_mesh.
+5. Final function must export at least one .stl mesh and return a list of filenames.
+6. Do not import modules and do not execute code outside the function.
+7. Output ONLY the python code block for the function.
+
+Current step index: {step_idx}/{step_total}
+Current step JSON:
+{step_json}
+
+Current parts JSON:
+{parts_json}
+
+Previous `assemble` function:
+```python
+{previous_code}
+```
+""".strip()
+
+    current_code = """def assemble(parts: list[dict]):
+    grid = empty_grid()
+    tool_mesh = grid_to_mesh(grid)
+    tool_filename = "tool.stl"
+    tool_mesh.export(tool_filename)
+    return [tool_filename]
+"""
+    step_codegen_history = [{
+        "role": "system",
+        "content": "You are an expert CAD/mesh code generator for deterministic incremental edits."
+    }]
+    for i, step in enumerate(steps, start=1):
+        prompt = incremental_prompt_template.format(
+            goal=designer_prompt_json.get("GOAL_DESCRIPTION", ""),
+            obj_desc=designer_prompt_json.get("3D_OBJECT_DESCRIPTION", ""),
+            step_idx=i,
+            step_total=len(steps),
+            step_json=json.dumps(step, ensure_ascii=False, indent=2),
+            parts_json=json.dumps(tool_json.get("parts", []), ensure_ascii=False, indent=2),
+            previous_code=current_code
+        )
+        step_codegen_history.append({"role": "user", "content": prompt})
+        llm_response = designer.generate(
+            prompt=prompt,
+            img=None,
+            json_mode=False,
+            chat_history=step_codegen_history
+        )
+        next_code = parse_code_block(llm_response, language_hint="python")
+        is_safe, safety_msg = static_validate_assemble_func(next_code)
+        append_execution_log(log_dir, f"[step_codegen {i}] static validation: {safety_msg}")
+        if not is_safe:
+            raise ValueError(f"Step {i} generated unsafe assemble code: {safety_msg}")
+        current_code = next_code
+        step_codegen_history.append({"role": "assistant", "content": f"```python\n{current_code}\n```"})
+        design_chat_history.append({
+            "role": "assistant",
+            "content": f"Step {i} updated assemble code."
+        })
+    return current_code
+
 
 def write_design_code(filename, tool_json):
     outp = ''
@@ -420,7 +512,10 @@ def write_design_code(filename, tool_json):
 
 
 ALLOWED_CALL_ROOTS = {
-    "primitive", "generate_3d", "rotate_to_align", "trimesh", "assemble",
+    "primitive", "generate_3d", "rotate_to_align", "get_position",
+    "get_axis_align_bounding_box", "get_volume", "rescale", "move",
+    "empty_grid", "add_mesh", "sub_mesh", "cut_grid", "grid_to_mesh",
+    "trimesh", "assemble",
     "len", "range", "float", "int", "str", "list", "dict", "tuple", "set",
     "abs", "min", "max", "sum", "enumerate", "zip"
 }
@@ -625,7 +720,26 @@ def render_and_save_with_genesis(mesh_path, output_folder, num_views=10):
     with open('tmp.py', 'w') as fo:
         fo.write(prog)
     
+    
 
+
+def post_process_output_meshes(output_files, base_dir):
+    processed_files = []
+    for rel_path in output_files:
+        raw_path = rel_path if os.path.isabs(rel_path) else os.path.join(base_dir, rel_path)
+        if not os.path.exists(raw_path):
+            raise FileNotFoundError(f"Generated mesh does not exist: {raw_path}")
+        mesh = trimesh.load(raw_path, force='mesh')
+        if isinstance(mesh, trimesh.Scene):
+            mesh = trimesh.util.concatenate([g for g in mesh.geometry.values()])
+        if mesh is None or len(mesh.vertices) == 0 or len(mesh.faces) == 0:
+            raise RuntimeError(f"Generated mesh is empty: {raw_path}")
+        trimesh.repair.fix_normals(mesh, multibody=True)
+        trimesh.repair.fill_holes(mesh)
+        repaired_path = os.path.splitext(raw_path)[0] + "_post.stl"
+        mesh.export(repaired_path)
+        processed_files.append(repaired_path)
+    return processed_files
 
 
 def run_tool_design(task_name, task_prompt_json_dir, designer_source='azure', critic_source='azure', designer_lm_id='o3-mini', critic_lm_id='gpt-4o'):
@@ -660,6 +774,14 @@ def run_tool_design(task_name, task_prompt_json_dir, designer_source='azure', cr
         try:
             designer_response = parse_json(designer_prompt, designer_response)
             designer_response_parsed = designer_response
+            if isinstance(designer_response, dict):
+                stepwise_assemble_func = generate_assemble_func_from_steps(
+                    tool_json=designer_response,
+                    designer_prompt_json=designer_prompt_json,
+                    design_chat_history=design_chat_history
+                )
+                if stepwise_assemble_func:
+                    designer_response["assemble_func"] = stepwise_assemble_func
             json_filename = os.path.join(log_dir, f"design{critic_cnt}.json")
             json.dump(designer_response, open(json_filename, 'w'), indent=4)
             code_filename = os.path.join(log_dir, f"design{critic_cnt}.py")
@@ -706,6 +828,7 @@ def run_tool_design(task_name, task_prompt_json_dir, designer_source='azure', cr
             )
             if missing_files:
                 raise FileNotFoundError(f"Generated output files are missing: {missing_files}")
+            output_files = post_process_output_meshes(output_files, os.getcwd())
             os.system(f"mkdir {log_dir}/{critic_cnt}")
             
             imgs = []

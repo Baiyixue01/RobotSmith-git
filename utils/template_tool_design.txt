@@ -159,12 +159,38 @@ You have several APIs for 3D editing:
                 If the grid is empty or no surface is found, faces might be empty.
         """
 
-To describe a generated tool, you will use a json format. Here is an example:
+To describe a generated tool, you will use a json format.
+IMPORTANT: first decompose the tool construction into explicit step-by-step operations,
+then provide parts/placement metadata.
+Before writing construction steps, you MUST reason in this order:
+1) analyze the scene/task and infer the tool's functional purpose;
+2) derive what geometric capabilities/shapes are needed to achieve that purpose;
+3) decompose into executable construction steps.
+The construction decomposition should follow this style:
+- step 1: Add a [shape]
+- step 2: Add/Remove [shape] at [position]
+- each next step only edits the existing intermediate tool
+
+Output JSON should follow this structure (schema-style, not a literal fixed instance):
 ```json
 {
     "name": a string,
+    "construction_steps": [
+        {
+            "step_id": 1,
+            "action": one in ["add", "remove"],
+            "shape": free-form shape description inferred from the task,
+            "parameters": free-form parameters required by this shape,
+            "position": [x, y, z], center position in tool-local coordinates,
+            "rotation_euler_deg": [rx, ry, rz],
+            "reason": one-sentence explanation of why this step helps the task
+        }
+    ],
+    "parts_note": "parts should correspond to intermediate/final components produced by construction_steps (you can think of them as step0/step1/... artifacts).",
     "parts": [
         {
+            "part_id": "step0_base",
+            "from_step_id": 1,
             "geom": one in ['cube', 'ball', 'cylinder', 'ring', 'tube', 'mesh'],
             "prompt": if "geom" is 'mesh', there is a string representing a text prompt for text-to-3d generation model; otherwise is an empty string,
             "parameters": if "geom" is 'mesh', the parameters are (lx, ly, lz), the length in x/y/z directions; 
@@ -175,7 +201,13 @@ To describe a generated tool, you will use a json format. Here is an example:
             ...
         },
     ],
-    "assemble_func": a complete python code to assemble all the parts above into the whole tool using 3D editing APIs provided.
+    "simulation_properties": {
+        "density": positive float (kg/m^3-like scale),
+        "friction": float in [0, 2],
+        "restitution": float in [0, 1],
+        "is_graspable_default": True/False
+    },
+    "assemble_func": optional initial python code. It can be empty string; the runtime may synthesize it from `construction_steps`.
         """
             def assemble(parts: list[dict]):
                 ...
@@ -196,11 +228,16 @@ To describe a generated tool, you will use a json format. Here is an example:
                     )
                 )
                 # the filename here should match a generated mesh from assemble_func (.stl or .obj), and the position, rotation and scale should be approprate to be here.
+                # if the simulator API supports it, use simulation_properties to set friction/restitution/density.
         """
 }
 ```
 
 You should make sure:
+`construction_steps` must be complete and executable in order from 1..N, with no missing step IDs.
+Each step should be atomic, explicit, and machine-readable.
+Do NOT constrain shape design to a fixed closed set; choose shapes according to functional analysis of the task.
+`parts` should map to stepwise construction results (intermediate and/or final), and may be organized as step0/step1/... semantics.
 The tool is saved. All the 3D editing functions in assembly func have return values, which should be received.
 In `placement_func`, `filename` must refer to an existing mesh file returned by `assemble_func`; `.stl` and `.obj` are both allowed.
 $TIPS_FOR_DESIGNER$
