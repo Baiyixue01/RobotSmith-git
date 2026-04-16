@@ -154,7 +154,7 @@ water0_path = Path(__file__).with_name("water0.npy")
 if water0_path.exists():
     water0 = np.load(water0_path)
 else:
-    water0 = env.water.get_pos().cpu().numpy()
+    water0 = env.water.get_particles().cpu().numpy()
     np.save(water0_path, water0)
     print(f"[gallery] generated '{water0_path.name}' from runtime initial water particles.")
 
