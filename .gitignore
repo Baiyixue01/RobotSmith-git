@@ -28,3 +28,4 @@ ext/Genesis/ext/*
 *pyc
 *test_*.py
 *npy
+test_api.py
