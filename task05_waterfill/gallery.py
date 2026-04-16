@@ -108,7 +108,7 @@ class FillREnv(RenderEnv):
         #     ),
         # )
         self.water = self.scene.add_entity(
-            morph=gs.morphs.Nowhere(n_particles=9600),
+            morph=gs.morphs.Nowhere(n_particles=960),
             material=gs.materials.SPH.Liquid(mu=0.01, sampler="regular"),
             surface=gs.surfaces.Glass(
                 color=(0.5, 0.7, 0.9, 1.0),
@@ -201,18 +201,27 @@ q_cup[3:] = np.deg2rad(q_cup[3:])
 env.cup.set_dofs_position(q_cup)
 env.cup.control_dofs_position(q_cup)
 
-water_pos = load_or_generate_water_positions(
-    num_particles=9600,
-    bottle_center=np.array([0.0143, 0.5]),
-    desk_height=env.desk_height,
-)
-env.water.set_pos(0, water_pos)
-env.water._solver._kernel_set_particles_active(
-    env.water._sim.cur_substep_local,
-    0, 9600, 
-    gs.ACTIVE,
-)
+# water_pos = load_or_generate_water_positions(
+#     num_particles=9600,
+#     bottle_center=np.array([0.0143, 0.5]),
+#     desk_height=env.desk_height,
+# )
+# env.water.set_pos(0, water_pos)
+# env.water._solver._kernel_set_particles_active(
+#     env.water._sim.cur_substep_local,
+#     0, 9600, 
+#     gs.ACTIVE,
+# )
 
+water_pos = np.load("water.npy").astype(np.float32)
+
+if water_pos.ndim == 3 and water_pos.shape[0] == 1:
+    water_pos = water_pos[0]
+
+print("water_pos shape:", water_pos.shape)   # 现在你这里大概率是 (960, 3)
+
+env.water.set_particles_pos(water_pos)       # 不要传 f
+env.water.set_particles_active(gs.ACTIVE)    # 不要传 f
 
 print('cup', env.cup.get_AABB()[0].tolist(), env.cup.get_AABB()[1].tolist())
 print('tool', env.tool.get_AABB()[0].tolist(), env.tool.get_AABB()[1].tolist())
@@ -313,6 +322,6 @@ for _ in range(500):
 #         env.save_trajectory_img()
 
 # state = env.water_emit._entity.get_state()
-# points = state._pos.detach().cpu().numpy()[:env.water_emit._next_particle]
-# np.save('water.npy', points)
+# points = state._pos.detach().cpu().numpy()[0, :env.water_emit._next_particle]
+# np.save("water.npy", points)
 # print(points.shape)

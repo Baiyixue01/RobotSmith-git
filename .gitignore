@@ -27,3 +27,4 @@ ext/Genesis/ext/*
 *tar*
 *pyc
 *test_*.py
+*npy
