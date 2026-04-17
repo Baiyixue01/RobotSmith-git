@@ -977,6 +977,46 @@ def _normalize_construction_steps(tool_json):
     tool_json["construction_steps"] = normalized
     return tool_json
 
+
+def _resolve_task_prompt_json_path(task_prompt_json_dir: str, task_name: str = None) -> str:
+    """Resolve task prompt json path from either a file path or a task directory."""
+    candidates = []
+
+    def _add(path):
+        if path and path not in candidates:
+            candidates.append(path)
+
+    normalized = os.path.expanduser(task_prompt_json_dir) if task_prompt_json_dir else task_prompt_json_dir
+    if normalized:
+        _add(normalized)
+        if os.path.isdir(normalized):
+            _add(os.path.join(normalized, 'task_prompt.json'))
+        elif not normalized.endswith('.json'):
+            _add(os.path.join(normalized, 'task_prompt.json'))
+
+        if not os.path.isabs(normalized):
+            _add(os.path.join(project_path, normalized))
+            _add(os.path.join(project_path, normalized, 'task_prompt.json'))
+        else:
+            abs_parts = os.path.normpath(normalized).split(os.sep)
+            if 'RobotSmith-git' in abs_parts:
+                idx = abs_parts.index('RobotSmith-git')
+                rel_after_repo = os.path.join(*abs_parts[idx + 1:]) if idx + 1 < len(abs_parts) else ''
+                _add(os.path.join(project_path, rel_after_repo))
+                _add(os.path.join(project_path, rel_after_repo, 'task_prompt.json'))
+
+    if task_name:
+        _add(os.path.join(project_path, task_name, 'task_prompt.json'))
+
+    for candidate in candidates:
+        if os.path.isfile(candidate):
+            return candidate
+
+    raise FileNotFoundError(
+        f"Cannot locate task_prompt.json from '{task_prompt_json_dir}'. Tried: {candidates}"
+    )
+
+
 def run_tool_design(task_name, task_prompt_json_dir,
                     designer_source='azure', critic_source='azure',
                     designer_lm_id='o3-mini', critic_lm_id='gpt-4o',
@@ -1000,7 +1040,10 @@ def run_tool_design(task_name, task_prompt_json_dir,
     )
 
     designer_prompt = open(os.path.join(project_path, 'utils', 'template_tool_design.txt'), 'r').read()
-    designer_prompt_json = json.load(open(task_prompt_json_dir, 'r'))
+    task_prompt_json_path = _resolve_task_prompt_json_path(task_prompt_json_dir, task_name=task_name)
+    designer_prompt_json = json.load(open(task_prompt_json_path, 'r'))
+
+    append_execution_log(log_dir, f"Using task prompt json: {task_prompt_json_path}")
 
     designer_prompt = designer_prompt.replace("$3D_OBJECT_DESCRIPTION$", designer_prompt_json['3D_OBJECT_DESCRIPTION'])
     designer_prompt = designer_prompt.replace("$GOAL_DESCRIPTION$", designer_prompt_json['GOAL_DESCRIPTION'])
