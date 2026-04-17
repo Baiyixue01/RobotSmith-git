@@ -1,0 +1,5 @@
+Error in critic 4: Static whitelist check failed: Call root not in whitelist: _ensure_stl_outputs
+Traceback (most recent call last):
+  File "/home/byx/project/RobotSmith-git/utils/pipeline1.py", line 1122, in run_tool_design
+    raise ValueError(f"Static whitelist check failed: {safety_msg}")
+ValueError: Static whitelist check failed: Call root not in whitelist: _ensure_stl_outputs

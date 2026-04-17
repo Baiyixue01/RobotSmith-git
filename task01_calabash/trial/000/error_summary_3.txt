@@ -1,7 +1,0 @@
-Error in critic 3: Step 0 generated unsafe assemble code: Call root not in whitelist: Vector
-Traceback (most recent call last):
-  File "/home/byx/project/RobotSmith-git/utils/pipeline1.py", line 1106, in run_tool_design
-    stepwise_assemble_func = generate_tool_from_steps(
-  File "/home/byx/project/RobotSmith-git/utils/pipeline1.py", line 686, in generate_tool_from_steps
-    raise ValueError(f"Step {step_id} generated unsafe assemble code: {safety_msg}")
-ValueError: Step 0 generated unsafe assemble code: Call root not in whitelist: Vector

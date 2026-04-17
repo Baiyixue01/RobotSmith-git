@@ -1,0 +1,47 @@
+```json
+{
+    "name": "dough_shaper",
+    "functional_purpose": "shape the dough into a calabash-like form",
+    "construction_steps": [
+        {
+            "step_id": 0,
+            "Instruction": "Add a curved cylindrical body",
+            "reason": "the curved surface will be used to shape the dough",
+            "is_graspable": True
+        },
+        {
+            "step_id": 1,
+            "Instruction": "Add a narrow cylindrical handle at one end of the curved body",
+            "reason": "the handle will allow the robot to manipulate the tool",
+            "is_graspable": True
+        },
+        {
+            "step_id": 2,
+            "Instruction": "Add a flat circular base at the other end of the curved body",
+            "reason": "the base will provide stability for the tool",
+            "is_graspable": False
+        }
+    ],
+    "simulation_properties": {
+        "density": 7850,
+        "friction": 0.5,
+        "restitution": 0.1,
+        "is_graspable_default": True
+    },
+    "placement_func": """
+        def placement():
+            self.tool = self.scene.add_entity(
+                gs.Morph.Mesh(
+                    filename="assembled_tool.stl",
+                    pos=(0.0, 0.0, 0.0),
+                    euler=(0, 0, 0),
+                    scale=(1, 1, 1),
+                )
+            )
+            # The filename here should match a generated mesh file (.stl or .obj).
+            # The position, rotation, and scale should be appropriate for the scene.
+            # If supported by the simulator API, use simulation_properties to set density,
+            # friction, and restitution.
+    """
+}
+```
