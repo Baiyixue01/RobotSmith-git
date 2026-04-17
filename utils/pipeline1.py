@@ -533,10 +533,7 @@ def generate_tool_from_steps(tool_json, designer_prompt_json, design_chat_histor
     if step_generator is None:
         raise ValueError("A step generator is required for OP-CAD incremental generation")
 
-    current_code = """
-def assemble(parts):
-    mesh_files = []
-""".strip()
+    current_code = ""
 
     for step in steps:
         step_id = int(step.get("step_id", 0))
@@ -553,7 +550,7 @@ def assemble(parts):
             chat_history=None
         )
         next_code = parse_code_block(llm_response, language_hint="python")
-        next_code = _strip_markdown_fence(next_code)
+        next_code = _normalize_step_code(current_code, next_code)
         is_safe, safety_msg = static_validate_assemble_func(next_code)
         append_execution_log(log_dir, f"[step_codegen {step_id}] static validation: {safety_msg}")
         if not is_safe:
