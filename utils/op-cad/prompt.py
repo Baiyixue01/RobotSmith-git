@@ -111,7 +111,6 @@ def build_incremental_cq_prompt(
 
     Example:
     ```python
-    from cadquery import Plane, Vector
     wp = cq.Workplane(inPlane=Plane(origin=(0, 0, 0), normal=Vector(0, 0, 1), xDir=Vector(1, 0, 0)))
     ```
     """).strip()
@@ -244,7 +243,7 @@ Perform the following operation **as a continuation** of the existing model:
 
 if __name__ == "__main__":
     # ====== 1) 准备一个 previous_code（模拟已执行的上下文）======
-    previous_code = dedent("""
+    previous_code = dedent("""sdasdas
     """).strip()
 
     # ====== 2) 准备一个操作指令 ======
@@ -255,7 +254,7 @@ if __name__ == "__main__":
         previous_code=previous_code,
         operation_instruction=operation_instruction,
         next_var_name="result",
-        op_kind="chamfer",              # 非 fillet/chamfer，走 shape+bool 规则
+        op_kind="",              # 非 fillet/chamfer，走 shape+bool 规则
         allow_comments=False,
     )
 

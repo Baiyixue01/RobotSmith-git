@@ -526,6 +526,95 @@ def _resolve_opcad_generator(designer_prompt_json, fallback_generator):
     return fallback_generator
 
 
+import re
+
+
+def _indent_block(code: str, indent: str = "    ") -> str:
+    lines = code.splitlines()
+    return "\n".join((indent + line) if line.strip() else "" for line in lines)
+
+
+def _find_last_result_assignment(code: str):
+    """
+    找最后一个 result / result_x 的赋值位置
+    """
+    pattern = re.compile(r"(?m)^(?P<indent>\s*)(?P<name>result(?:_\d+)?)\s*=")
+    matches = list(pattern.finditer(code))
+    return matches[-1] if matches else None
+
+
+def _normalize_incremental_step_code(step_code: str, step_id: int) -> str:
+    """
+    把 LLM 返回的“单步增量代码”规范成：
+    - 当前步输出变量一定是 result_{step_id}
+    - 上一步结果统一引用为 result_{step_id-1}
+    - 兼容模型输出 result / result_n / result_x 等写法
+    """
+    step_code = _strip_markdown_fence(step_code).strip()
+    if not step_code:
+        raise ValueError(f"Step {step_id} returned empty code.")
+
+    prev_var = f"result_{step_id - 1}" if step_id > 0 else None
+    next_var = f"result_{step_id}"
+
+    last_assign = _find_last_result_assignment(step_code)
+    if last_assign is None:
+        raise ValueError(
+            f"Step {step_id} code must contain a final assignment to result / result_x."
+        )
+
+    # 先把“最后一个结果赋值目标”打个占位，避免后面替换 RHS 时把 LHS 也误改了
+    step_code = (
+        step_code[:last_assign.start("name")]
+        + "__RESULT_TARGET__"
+        + step_code[last_assign.end("name"):]
+    )
+
+    # 把 prompt 里的占位式写法 result_n 统一替换成上一结果
+    if prev_var is not None:
+        step_code = re.sub(r"\bresult_n\b", prev_var, step_code)
+
+        # 如果模型偷懒写成 result.union(...) / result.cut(...) / result.edges(...)
+        # 这里也统一解释成“上一结果”
+        step_code = re.sub(r"\bresult\b", prev_var, step_code)
+    else:
+        # 第一步不该引用历史 result；如果模型写了 result_n，直接保留给后续报错更清晰
+        step_code = re.sub(r"\bresult_n\b", "result_n", step_code)
+
+    # 最后把当前步输出变量固定为 result_{step_id}
+    step_code = step_code.replace("__RESULT_TARGET__", next_var)
+
+    return step_code.strip()
+
+
+def _detect_last_result_var(code: str) -> str:
+    """从前序代码中自动检测最后一个 result_x 变量名；没有则返回 default。"""
+    matches = re.findall(r"\b(result_\d+)\b\s*=", code)
+    return matches[-1] if matches else None
+
+def _wrap_incremental_code_as_assemble(accumulated_code: str) -> str:
+    """
+    把累计的增量代码包成完整 assemble(parts) 函数。
+    默认导出为 STL。
+    """
+    final_var = _detect_last_result_var(accumulated_code)
+    if not final_var:
+        raise ValueError("No result_x variable found in accumulated incremental code.")
+
+    body = _indent_block(accumulated_code)
+
+    assemble_code = f"""
+def assemble(parts):
+{body}
+
+    out_path = "assembled_tool.stl"
+    cq.exporters.export({final_var}, out_path)
+    return [out_path]
+""".strip()
+
+    return assemble_code
+
+
 def generate_tool_from_steps(tool_json, designer_prompt_json, design_chat_history, step_generator=None):
     steps = tool_json.get("construction_steps", None)
     if not steps:
@@ -533,37 +622,51 @@ def generate_tool_from_steps(tool_json, designer_prompt_json, design_chat_histor
     if step_generator is None:
         raise ValueError("A step generator is required for OP-CAD incremental generation")
 
-    current_code = """
-def assemble(parts):
-    mesh_files = []
-""".strip()
+    current_code = ""   # 这里只存“累计后的增量 CadQuery 片段”
 
     for step in steps:
         step_id = int(step.get("step_id", 0))
         instruction = step.get("Instruction", "")
+
         prompt = _build_opcad_step_prompt(
             previous_code=current_code,
             step_id=step_id,
             instruction=instruction,
         )
+
         llm_response = step_generator.generate(
             prompt=prompt,
             img=None,
             json_mode=False,
             chat_history=None
         )
-        next_code = parse_code_block(llm_response, language_hint="python")
-        next_code = _strip_markdown_fence(next_code)
-        is_safe, safety_msg = static_validate_assemble_func(next_code)
+
+        raw_step_code = parse_code_block(llm_response, language_hint="python")
+        raw_step_code = _strip_markdown_fence(raw_step_code)
+
+        normalized_step_code = _normalize_incremental_step_code(raw_step_code, step_id)
+
+        updated_code = (
+            (current_code.rstrip() + "\n\n" + normalized_step_code.lstrip()).strip()
+            if current_code else normalized_step_code
+        )
+
+        # 每一步都对“完整 assemble 函数”做校验，而不是只校验单步片段
+        candidate_assemble_func = _wrap_incremental_code_as_assemble(updated_code)
+        is_safe, safety_msg = static_validate_assemble_func(candidate_assemble_func)
         append_execution_log(log_dir, f"[step_codegen {step_id}] static validation: {safety_msg}")
         if not is_safe:
             raise ValueError(f"Step {step_id} generated unsafe assemble code: {safety_msg}")
-        current_code = next_code
+
+        current_code = updated_code
+
         design_chat_history.append({
             "role": "assistant",
             "content": f"Step {step_id} updated assemble code."
         })
-    return _finalize_assemble_func_to_stl(current_code)
+
+    final_assemble_func = _wrap_incremental_code_as_assemble(current_code)
+    return _finalize_assemble_func_to_stl(final_assemble_func)
 
 
 def write_design_code(filename, tool_json):
