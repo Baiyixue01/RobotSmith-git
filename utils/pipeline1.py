@@ -727,7 +727,7 @@ ALLOWED_CALL_ROOTS = {
     "primitive", "generate_3d", "rotate_to_align", "get_position",
     "get_axis_align_bounding_box", "get_volume", "rescale", "move",
     "empty_grid", "add_mesh", "sub_mesh", "cut_grid", "grid_to_mesh",
-    "trimesh", "assemble", "Plane",
+    "trimesh", "assemble", "Plane", "Vector", "Workplane",
     "len", "range", "float", "int", "str", "list", "dict", "tuple", "set",
     "abs", "min", "max", "sum", "enumerate", "zip"
 }
