@@ -727,7 +727,7 @@ ALLOWED_CALL_ROOTS = {
     "primitive", "generate_3d", "rotate_to_align", "get_position",
     "get_axis_align_bounding_box", "get_volume", "rescale", "move",
     "empty_grid", "add_mesh", "sub_mesh", "cut_grid", "grid_to_mesh",
-    "trimesh", "assemble",
+    "trimesh", "assemble", "Plane",
     "len", "range", "float", "int", "str", "list", "dict", "tuple", "set",
     "abs", "min", "max", "sum", "enumerate", "zip"
 }
@@ -960,6 +960,22 @@ def _force_placement_filename(placement_func: str, filename: str = "assembled_to
     return re.sub(r'filename\s*=\s*"[^"]+"', f'filename="{filename}"', placement_func)
 
 def _normalize_construction_steps(tool_json):
+    if isinstance(tool_json, str):
+        candidate = tool_json.strip()
+        try:
+            tool_json = json.loads(candidate)
+        except json.JSONDecodeError:
+            if "```json" in candidate:
+                start = candidate.find("```json") + len("```json")
+                end = candidate.find("```", start)
+                candidate = candidate[start:end].strip() if end != -1 else candidate[start:].strip()
+                tool_json = json.loads(candidate)
+            else:
+                raise ValueError("Designer response is a string but not valid JSON content")
+
+    if not isinstance(tool_json, dict):
+        raise ValueError(f"Designer response must be a JSON object, got {type(tool_json).__name__}")
+
     steps = tool_json.get("construction_steps", [])
     if not isinstance(steps, list) or len(steps) == 0:
         raise ValueError("construction_steps must be a non-empty list")
