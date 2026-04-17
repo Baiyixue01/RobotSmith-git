@@ -507,28 +507,6 @@ def _ensure_stl_outputs(paths):
     return cleaned
 
 
-def _indent_code_block(code, indent="    "):
-    if not code:
-        return ""
-    lines = code.splitlines()
-    return "\n".join(f"{indent}{ln}" if ln.strip() else "" for ln in lines)
-
-
-def _normalize_step_code(previous_code, candidate_code):
-    cleaned_candidate = _strip_markdown_fence(candidate_code)
-    if "def assemble(" in cleaned_candidate:
-        return cleaned_candidate
-
-    prev = (previous_code or "").rstrip()
-    if "def assemble(" in prev:
-        return f"{prev}\n{_indent_code_block(cleaned_candidate)}".rstrip()
-
-    scaffold = "def assemble(parts):\n    mesh_files = []"
-    if cleaned_candidate:
-        return f"{scaffold}\n{_indent_code_block(cleaned_candidate)}".rstrip()
-    return scaffold
-
-
 def _resolve_opcad_generator(designer_prompt_json, fallback_generator):
     opcad_cfg = designer_prompt_json.get("OPCAD_GENERATOR", {}) if isinstance(designer_prompt_json, dict) else {}
     if not isinstance(opcad_cfg, dict):
