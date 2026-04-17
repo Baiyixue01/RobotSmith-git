@@ -1,0 +1,37 @@
+{
+    "name": "dough shape tool",
+    "functional_purpose": "to shape the cubical dough into a calabash-like shape",
+    "construction_steps": [
+        {
+            "step_id": 0,
+            "Instruction": "Add a cylindrical base",
+            "reason": "the base provides a foundation for the tool to shape the dough",
+            "is_graspable": false
+        },
+        {
+            "step_id": 1,
+            "Instruction": "Add a cylindrical extension with a larger diameter and a narrower taper",
+            "reason": "the extension helps to shape the dough into a calabash-like shape",
+            "is_graspable": false
+        },
+        {
+            "step_id": 2,
+            "Instruction": "Add a flat, oval-shaped blade at the end of the extension",
+            "reason": "the blade helps to shape the dough into a calabash-like shape",
+            "is_graspable": false
+        },
+        {
+            "step_id": 3,
+            "Instruction": "Add a cylindrical handle",
+            "reason": "the handle allows the robot arm to grasp the tool",
+            "is_graspable": true
+        }
+    ],
+    "simulation_properties": {
+        "density": 1000,
+        "friction": 1,
+        "restitution": 0,
+        "is_graspable_default": true
+    },
+    "placement_func": "def placement():\n    self.tool = scene.add_entity(\n        gs.Morph.Mesh(\n            filename=\"assembled_tool.stl\",\n            pos=(0.0, 0.0, 0.0),\n            euler=(0, 0, 0),\n            scale=(1, 1, 1),\n        )\n    )\n"
+}

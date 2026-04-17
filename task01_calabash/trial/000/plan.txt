@@ -1,0 +1,79 @@
+### Tool Design
+
+```json
+{
+    "name": "dough_molding_tool",
+    "functional_purpose": "mold dough into a calabash-like shape",
+    "construction_steps": [
+        {
+            "step_id": 0,
+            "Instruction": "Add a cylindrical base",
+            "reason": "the base provides a foundation for the tool to press the dough",
+            "is_graspable": False
+        },
+        {
+            "step_id": 1,
+            "Instruction": "Add a conical body",
+            "reason": "the conical body helps to shape the dough into a calabash-like shape",
+            "is_graspable": False
+        },
+        {
+            "step_id": 2,
+            "Instruction": "Add a flat top",
+            "reason": "the flat top provides a surface to press the dough with",
+            "is_graspable": False
+        },
+        {
+            "step_id": 3,
+            "Instruction": "Add a cylindrical handle",
+            "reason": "the handle allows the robot to grasp and manipulate the tool",
+            "is_graspable": True
+        }
+    ],
+    "simulation_properties": {
+        "density": 5000.0,
+        "friction": 0.8,
+        "restitution": 0.2,
+        "is_graspable_default": True
+    },
+    "placement_func": """
+        def placement():
+            self.tool = scene.add_entity(
+                gs.Morph.Mesh(
+                    filename="assembled_tool.stl",
+                    pos=(0.0, 0.0, -0.035),
+                    euler=(0, -0.7854, 0),
+                    scale=(1, 1, 1),
+                )
+            )
+            # The filename here should match a generated mesh file (.stl or .obj).
+            # The position, rotation, and scale should be appropriate for the scene.
+            # If supported by the simulator API, use simulation_properties to set density,
+            # friction, and restitution.
+    """
+}
+```
+
+### Robotic Manipulation Trajectory
+
+Here's an example of a robotic manipulation trajectory that uses the designed tool to mold the dough into a calabash-like shape:
+
+```python
+# Move the gripper to the dough
+adjust_gripper_pose(pos=(0.35, 0.0, 0.0), quat=(0.0, 0.0, 0.0, 1.0))
+
+# Grasp the dough with the tool
+grasp(obj=self.dough, grasp_quat=(0.7071, 0, 0, 0.7071))
+
+# Move the gripper to press the dough with the conical body
+adjust_gripper_pose(pos=(0.0, 0.065, 0.0), quat=(0.0, 0.0, 0.0, 1.0))
+
+# Hold the position for a while to shape the dough
+import time
+time.sleep(2)
+
+# Release the dough
+release()
+```
+
+Note: The above trajectory is just one possible solution and may need to be adjusted based on the specific requirements of the task and the capabilities of the robot.

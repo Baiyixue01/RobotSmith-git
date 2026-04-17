@@ -1,0 +1,31 @@
+{
+    "name": "calabash molding tool",
+    "functional_purpose": "mold the dough into a calabash-like shape",
+    "construction_steps": [
+        {
+            "step_id": 0,
+            "Instruction": "Add a cylindrical body",
+            "reason": "the cylindrical body will be used to shape the dough",
+            "is_graspable": false
+        },
+        {
+            "step_id": 1,
+            "Instruction": "Add a conical extension at the top of the cylindrical body",
+            "reason": "the conical extension will help to shape the dough into a calabash-like shape",
+            "is_graspable": false
+        },
+        {
+            "step_id": 2,
+            "Instruction": "Add a hemispherical extension at the bottom of the cylindrical body",
+            "reason": "the hemispherical extension will help to support the dough and prevent it from falling",
+            "is_graspable": false
+        }
+    ],
+    "simulation_properties": {
+        "density": 5000,
+        "friction": 0.5,
+        "restitution": 0.2,
+        "is_graspable_default": false
+    },
+    "placement_func": "def placement():\n    self.tool = self.scene.add_entity(\n        gs.Morph.Mesh(\n            filename=\"assembled_tool.stl\",\n            pos=(0.0, 0.312, 0.0),  # position the tool above the dough\n            euler=(0, 0, 0),\n            scale=(1, 1, 1),\n        )\n    )\n"
+}

@@ -1,0 +1,7 @@
+Error in critic 4: Designer response must be a JSON object, got NoneType
+Traceback (most recent call last):
+  File "/home/byx/project/RobotSmith-git/utils/pipeline1.py", line 1085, in run_tool_design
+    designer_response = _normalize_construction_steps(designer_response)
+  File "/home/byx/project/RobotSmith-git/utils/pipeline1.py", line 977, in _normalize_construction_steps
+    raise ValueError(f"Designer response must be a JSON object, got {type(tool_json).__name__}")
+ValueError: Designer response must be a JSON object, got NoneType

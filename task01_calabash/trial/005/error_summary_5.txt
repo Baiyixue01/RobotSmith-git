@@ -1,7 +1,0 @@
-Error in critic 5: 'str' object has no attribute 'get'
-Traceback (most recent call last):
-  File "/home/byx/project/RobotSmith-git/utils/pipeline1.py", line 1069, in run_tool_design
-    designer_response = _normalize_construction_steps(designer_response)
-  File "/home/byx/project/RobotSmith-git/utils/pipeline1.py", line 963, in _normalize_construction_steps
-    steps = tool_json.get("construction_steps", [])
-AttributeError: 'str' object has no attribute 'get'
