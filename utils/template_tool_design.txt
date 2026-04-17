@@ -8,7 +8,7 @@ You need to design a tool to help finish the task.
 
 To describe a generated tool, you will use a json format.
 IMPORTANT: first decompose the tool construction into explicit step-by-step operations,
-then provide parts/placement metadata.
+then provide simulation/placement metadata.
 Before writing construction steps, you MUST reason in this order:
 1) analyze the scene/task and infer the tool's functional purpose;
 2) derive what geometric capabilities/shapes are needed to achieve that purpose;
@@ -72,7 +72,10 @@ Output JSON should follow this structure (schema-style, not a literal fixed inst
 ```
 
 You should make sure:
-`construction_steps` must be complete and executable in order from 1..N, with no missing step IDs.
+Output valid JSON only, enclosed in ```json``` ... ```.
+`construction_steps` must be complete and executable in order from 0..N, with no missing step IDs.
 Each step should be atomic, explicit, and machine-readable.
 In `placement_func`, provide a reasonable initial position, rotation, and scale for the designed tool in the scene.
 $TIPS_FOR_DESIGNER$
+The actual tool geometry will be generated later by a separate generator from construction_steps.
+In placement_func, always use filename="assembled_tool.stl".

@@ -671,24 +671,25 @@ def generate_tool_from_steps(tool_json, designer_prompt_json, design_chat_histor
 
 def write_design_code(filename, tool_json):
     outp = ''
-    print('tool_json', tool_json)   
+    print('tool_json', tool_json)
+
     with open(os.path.join(project_path, 'utils', 'api_tool_design.py'), 'r') as fi:
-        for line in fi.readlines():
-            outp += line
+        outp += fi.read()
         outp += '\n\n\n\n\n'
 
     outp += tool_json['assemble_func']
     outp += '\n\n\n'
 
+    parts_obj = tool_json.get('parts', {})   # 没有 parts 就给空 dict
     outp += 'parts = '
-    parts = json.dumps(tool_json['parts'], indent=4)
-    parts = parts.replace('true', 'True')
-    parts = parts.replace('false', 'False')
+    parts = json.dumps(parts_obj, indent=4)
+    parts = parts.replace('true', 'True').replace('false', 'False')
     outp += parts
-    outp += '\n'   
+    outp += '\n'
+
     outp += 'filenames = assemble(parts)\n'
     outp += 'print(filenames)\n'
-    
+
     print(outp)
 
     with open(filename, 'w') as fo:
@@ -926,26 +927,54 @@ def post_process_output_meshes(output_files, base_dir):
     return processed_files
 
 
-def run_tool_design(task_name, task_prompt_json_dir, designer_source='azure', critic_source='azure', designer_lm_id='o3-mini', critic_lm_id='gpt-4o'):
+def _force_placement_filename(placement_func: str, filename: str = "assembled_tool.stl") -> str:
+    if not placement_func:
+        return placement_func
+    return re.sub(r'filename\s*=\s*"[^"]+"', f'filename="{filename}"', placement_func)
+
+def _normalize_construction_steps(tool_json):
+    steps = tool_json.get("construction_steps", [])
+    if not isinstance(steps, list) or len(steps) == 0:
+        raise ValueError("construction_steps must be a non-empty list")
+
+    steps = sorted(steps, key=lambda x: int(x.get("step_id", 0)))
+
+    normalized = []
+    for expected_id, step in enumerate(steps):
+        step = dict(step)
+        actual_id = int(step.get("step_id", -1))
+        if actual_id != expected_id:
+            step["step_id"] = expected_id
+        normalized.append(step)
+
+    tool_json["construction_steps"] = normalized
+    return tool_json
+
+def run_tool_design(task_name, task_prompt_json_dir,
+                    designer_source='azure', critic_source='azure',
+                    designer_lm_id='o3-mini', critic_lm_id='gpt-4o'):
     init_agents(
         designer_source=designer_source,
         critic_source=critic_source,
         designer_lm_id=designer_lm_id,
         critic_lm_id=critic_lm_id
     )
+
     append_execution_log(
         log_dir,
         f"Initialized agents: designer=({designer_source}, {designer_lm_id}), critic=({critic_source}, {critic_lm_id})"
     )
-    
-    designer_prompt =  open(os.path.join(project_path, 'utils', 'template_tool_design.txt'), 'r').read()
+
+    designer_prompt = open(os.path.join(project_path, 'utils', 'template_tool_design.txt'), 'r').read()
     designer_prompt_json = json.load(open(task_prompt_json_dir, 'r'))
+
     designer_prompt = designer_prompt.replace("$3D_OBJECT_DESCRIPTION$", designer_prompt_json['3D_OBJECT_DESCRIPTION'])
     designer_prompt = designer_prompt.replace("$GOAL_DESCRIPTION$", designer_prompt_json['GOAL_DESCRIPTION'])
     designer_prompt = designer_prompt.replace("$3D_CONFIGURATION$", designer_prompt_json['3D_CONFIGURATION'])
     designer_prompt = designer_prompt.replace("$TIPS_FOR_DESIGNER$", designer_prompt_json['TIPS_FOR_DESIGNER'])
+
     step_generator = _resolve_opcad_generator(designer_prompt_json, designer)
-    
+
     designer_response = designer.generate(prompt=designer_prompt, img=None, json_mode=False)
 
     critic_cnt = 0
@@ -953,116 +982,141 @@ def run_tool_design(task_name, task_prompt_json_dir, designer_source='azure', cr
         'role': 'user',
         'content': designer_prompt
     }]
+
     while critic_cnt <= 5:
         critic_cnt += 1
         designer_response_parsed = None
+
         try:
             designer_response = parse_json(designer_prompt, designer_response)
+            designer_response = _normalize_construction_steps(designer_response)
             designer_response_parsed = designer_response
-            if isinstance(designer_response, dict):
-                stepwise_assemble_func = generate_tool_from_steps(
-                    tool_json=designer_response,
-                    designer_prompt_json=designer_prompt_json,
-                    design_chat_history=design_chat_history,
-                    step_generator=step_generator
-                )
-                if stepwise_assemble_func:
-                    designer_response["assemble_func"] = stepwise_assemble_func
+
+            required_keys = [
+                "name",
+                "functional_purpose",
+                "construction_steps",
+                "simulation_properties",
+                "placement_func",
+            ]
+            for k in required_keys:
+                if k not in designer_response:
+                    raise ValueError(f"Designer JSON missing required field: {k}")
+
+            # 统一 placement_func 中的文件名，和 generator 输出一致
+            designer_response["placement_func"] = _force_placement_filename(
+                designer_response.get("placement_func", ""),
+                "assembled_tool.stl"
+            )
+
+            # generator 根据 designer 的 construction_steps 生成 assemble_func
+            stepwise_assemble_func = generate_tool_from_steps(
+                tool_json=designer_response,
+                designer_prompt_json=designer_prompt_json,
+                design_chat_history=design_chat_history,
+                step_generator=step_generator
+            )
+            designer_response["assemble_func"] = stepwise_assemble_func
+
             json_filename = os.path.join(log_dir, f"design{critic_cnt}.json")
             json.dump(designer_response, open(json_filename, 'w'), indent=4)
+
             code_filename = os.path.join(log_dir, f"design{critic_cnt}.py")
-            is_safe, safety_msg = static_validate_assemble_func(designer_response.get("assemble_func", ""))
+
+            is_safe, safety_msg = static_validate_assemble_func(designer_response["assemble_func"])
             append_execution_log(log_dir, f"[critic {critic_cnt}] static validation: {safety_msg}")
             if not is_safe:
                 raise ValueError(f"Static whitelist check failed: {safety_msg}")
+
             write_design_code(code_filename, designer_response)
-            
+
             design_chat_history.append({
                 'role': 'assistant',
                 'content': json.dumps(designer_response)
             })
 
-            start_time = time.perf_counter()
-            try:
-                result = subprocess.run(
-                    ["python3", code_filename],
-                    capture_output=True,
-                    text=True,
-                    timeout=300
-                )
-            except subprocess.TimeoutExpired as e:
-                duration = time.perf_counter() - start_time
-                append_execution_log(
-                    log_dir,
-                    f"[critic {critic_cnt}] timeout after {duration:.2f}s (limit={e.timeout}s)"
-                )
-                raise
-            duration = time.perf_counter() - start_time
-            append_execution_log(
-                log_dir,
-                f"[critic {critic_cnt}] exec duration={duration:.2f}s, returncode={result.returncode}, stderr={result.stderr.strip()[:1000]}"
+            result = subprocess.run(
+                ["python3", code_filename],
+                capture_output=True,
+                text=True,
+                timeout=300
             )
+
             if result.returncode != 0:
                 raise Exception(f"Error in subprocess: {result.stderr}")
-            print(result.stdout)
-            output_files = ast.literal_eval(result.stdout)
-            assert isinstance(output_files, list), "Output files should be a list"
-            missing_files = [f for f in output_files if not os.path.exists(f)]
-            append_execution_log(
-                log_dir,
-                f"[critic {critic_cnt}] output files={output_files}, missing={missing_files}"
-            )
-            if missing_files:
-                raise FileNotFoundError(f"Generated output files are missing: {missing_files}")
-            output_files = post_process_output_meshes(output_files, os.getcwd())
-            os.system(f"mkdir {log_dir}/{critic_cnt}")
-            
-            imgs = []
-            for output_file in output_files:
-                os.system(f"cp {output_file} {log_dir}/{critic_cnt}/")
-                render_and_save_with_objects(f"{log_dir}/{critic_cnt}/{output_file}", json_filename, f"{log_dir}/{critic_cnt}/rendered_views", num_views=5, )
-            
-                for i in range(5):
-                    img_path = os.path.join(f"{log_dir}/{critic_cnt}/rendered_views", f"{i:03d}.png")
-                    imgs.append(img_path)
 
-            critic_prompt =  open(os.path.join(project_path, 'utils', 'template_tool_critic.txt'), 'r').read()
+            output_files = ast.literal_eval(result.stdout)
+            if not isinstance(output_files, list):
+                raise ValueError("Output files should be a list")
+
+            output_files = post_process_output_meshes(output_files, os.getcwd())
+
+            os.makedirs(f"{log_dir}/{critic_cnt}", exist_ok=True)
+            imgs = []
+
+            for output_file in output_files:
+                subprocess.run(["cp", output_file, f"{log_dir}/{critic_cnt}/"], check=False)
+                render_and_save_with_objects(
+                    f"{log_dir}/{critic_cnt}/{os.path.basename(output_file)}",
+                    json_filename,
+                    f"{log_dir}/{critic_cnt}/rendered_views",
+                    num_views=5
+                )
+                for i in range(5):
+                    imgs.append(os.path.join(f"{log_dir}/{critic_cnt}/rendered_views", f"{i:03d}.png"))
+
+            critic_prompt = open(os.path.join(project_path, 'utils', 'template_tool_critic.txt'), 'r').read()
             critic_prompt = critic_prompt.replace("$3D_OBJECT_DESCRIPTION$", designer_prompt_json['3D_OBJECT_DESCRIPTION'])
             critic_prompt = critic_prompt.replace("$GOAL_DESCRIPTION$", designer_prompt_json['GOAL_DESCRIPTION'])
             critic_prompt = critic_prompt.replace("$3D_CONFIGURATION$", designer_prompt_json['3D_CONFIGURATION'])
-    
+
             critic_response = critic.generate(prompt=critic_prompt, img=imgs, json_mode=False)
-            designer_prompt = critic_response
-            print('critic+response', designer_prompt)
+
             if 'DONE' in critic_response:
                 break
-            designer_response = designer.generate(prompt=designer_prompt, img=None, json_mode=False, chat_history=design_chat_history)
 
+            designer_prompt = critic_response
             design_chat_history.append({
                 'role': 'user',
                 'content': designer_prompt
             })
+
+            designer_response = designer.generate(
+                prompt=designer_prompt,
+                img=None,
+                json_mode=False,
+                chat_history=design_chat_history
+            )
 
         except Exception as e:
             err_summary = f"Error in critic {critic_cnt}: {e}"
             append_execution_log(log_dir, f"{err_summary}\n{traceback.format_exc()}")
-            print(f"{err_summary} with traceback: {traceback.format_exc()}")
+
             if designer_response_parsed is not None:
                 fallback_json_filename = os.path.join(log_dir, f"design{critic_cnt}_failed.json")
                 json.dump(designer_response_parsed, open(fallback_json_filename, 'w'), indent=4)
+
             with open(os.path.join(log_dir, f"error_summary_{critic_cnt}.txt"), 'w') as fo:
                 fo.write(err_summary + "\n")
                 fo.write(traceback.format_exc())
+
             designer_prompt = (
-                "The previous tool design failed during static validation or execution. "
+                "The previous tool design or generated tool code failed. "
                 f"Failure summary: {err_summary}. "
-                "Please repair the JSON design and provide a corrected version."
+                "Please revise the tool plan, construction_steps, or placement_func and return corrected JSON only."
             )
+
             design_chat_history.append({
                 'role': 'user',
                 'content': designer_prompt
             })
-            designer_response = designer.generate(prompt=designer_prompt, img=None, json_mode=False, chat_history=design_chat_history)
+
+            designer_response = designer.generate(
+                prompt=designer_prompt,
+                img=None,
+                json_mode=False,
+                chat_history=design_chat_history
+            )
             continue
 
     planing_chat_history = [design_chat_history[0], design_chat_history[-1]]
