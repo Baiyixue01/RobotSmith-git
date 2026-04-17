@@ -1,0 +1,31 @@
+{
+    "name": "calabash former",
+    "functional_purpose": "form a calabash-like shape from the dough",
+    "construction_steps": [
+        {
+            "step_id": 0,
+            "Instruction": "Add a cylindrical base",
+            "reason": "the base provides a foundation for the tool to rest on the dough",
+            "is_graspable": false
+        },
+        {
+            "step_id": 1,
+            "Instruction": "Add a convex hemispherical body",
+            "reason": "the body will help shape the dough into a calabash-like form",
+            "is_graspable": false
+        },
+        {
+            "step_id": 2,
+            "Instruction": "Add a flat, broad, round plate",
+            "reason": "the top will help shape the dough into a calabash-like form",
+            "is_graspable": true
+        }
+    ],
+    "simulation_properties": {
+        "density": 1000.0,
+        "friction": 1.5,
+        "restitution": 0.5,
+        "is_graspable_default": true
+    },
+    "placement_func": "def placement():\n    self.tool = self.scene.add_entity(\n        gs.Morph.Mesh(\n            filename=\"assembled_tool.stl\",\n            pos=(0.0, 0.0, 0.0),\n            euler=(0, 0, 0),\n            scale=(1, 1, 1),\n        )\n    )\n    self.tool.set_density(1000.0)\n    self.tool.set_friction(1.5)\n    self.tool.set_restitution(0.5)"
+}
