@@ -48,6 +48,8 @@ argparser.add_argument('--designer_source', type=str, default='azure')
 argparser.add_argument('--critic_source', type=str, default='azure')
 argparser.add_argument('--designer_lm_id', type=str, default='o3-mini')
 argparser.add_argument('--critic_lm_id', type=str, default='gpt-4o')
+argparser.add_argument('--step_generator_source', type=str, default=None)
+argparser.add_argument('--step_generator_lm_id', type=str, default=None)
 args = argparser.parse_args()
 
 
@@ -356,10 +358,12 @@ class Generator:
 
 designer = None
 critic = None
+step_generator_agent = None
 
 
-def init_agents(designer_source='azure', critic_source='azure', designer_lm_id='o3-mini', critic_lm_id='gpt-4o'):
-    global designer, critic
+def init_agents(designer_source='azure', critic_source='azure', designer_lm_id='o3-mini', critic_lm_id='gpt-4o',
+                step_generator_source=None, step_generator_lm_id=None):
+    global designer, critic, step_generator_agent
     designer = Generator(
         lm_source=designer_source,
         lm_id=designer_lm_id,
@@ -368,6 +372,16 @@ def init_agents(designer_source='azure', critic_source='azure', designer_lm_id='
         top_p=1.0,
         logger=None
     )
+    step_generator_agent = None
+    if step_generator_source and step_generator_lm_id:
+        step_generator_agent = Generator(
+            lm_source=step_generator_source,
+            lm_id=step_generator_lm_id,
+            max_tokens=16000,
+            temperature=0.2,
+            top_p=1.0,
+            logger=None
+        )
     critic = Generator(
         lm_source=critic_source,
         lm_id=critic_lm_id,
@@ -507,7 +521,7 @@ def _ensure_stl_outputs(paths):
     return cleaned
 
 
-def _resolve_opcad_generator(designer_prompt_json, fallback_generator):
+def _resolve_opcad_generator(designer_prompt_json, fallback_generator, agent_generator=None):
     opcad_cfg = designer_prompt_json.get("OPCAD_GENERATOR", {}) if isinstance(designer_prompt_json, dict) else {}
     if not isinstance(opcad_cfg, dict):
         opcad_cfg = {}
@@ -523,6 +537,12 @@ def _resolve_opcad_generator(designer_prompt_json, fallback_generator):
             top_p=opcad_cfg.get("top_p", 1.0),
             logger=None
         )
+    if agent_generator is not None:
+        append_execution_log(
+            log_dir,
+            f"Using dedicated step-generator agent: source={agent_generator.lm_source}, lm_id={agent_generator.lm_id}"
+        )
+        return agent_generator
     return fallback_generator
 
 
@@ -952,17 +972,24 @@ def _normalize_construction_steps(tool_json):
 
 def run_tool_design(task_name, task_prompt_json_dir,
                     designer_source='azure', critic_source='azure',
-                    designer_lm_id='o3-mini', critic_lm_id='gpt-4o'):
+                    designer_lm_id='o3-mini', critic_lm_id='gpt-4o',
+                    step_generator_source=None, step_generator_lm_id=None):
     init_agents(
         designer_source=designer_source,
         critic_source=critic_source,
         designer_lm_id=designer_lm_id,
-        critic_lm_id=critic_lm_id
+        critic_lm_id=critic_lm_id,
+        step_generator_source=step_generator_source,
+        step_generator_lm_id=step_generator_lm_id
     )
 
     append_execution_log(
         log_dir,
-        f"Initialized agents: designer=({designer_source}, {designer_lm_id}), critic=({critic_source}, {critic_lm_id})"
+        (
+            f"Initialized agents: designer=({designer_source}, {designer_lm_id}), "
+            f"critic=({critic_source}, {critic_lm_id}), "
+            f"step_generator=({step_generator_source}, {step_generator_lm_id})"
+        )
     )
 
     designer_prompt = open(os.path.join(project_path, 'utils', 'template_tool_design.txt'), 'r').read()
@@ -973,7 +1000,7 @@ def run_tool_design(task_name, task_prompt_json_dir,
     designer_prompt = designer_prompt.replace("$3D_CONFIGURATION$", designer_prompt_json['3D_CONFIGURATION'])
     designer_prompt = designer_prompt.replace("$TIPS_FOR_DESIGNER$", designer_prompt_json['TIPS_FOR_DESIGNER'])
 
-    step_generator = _resolve_opcad_generator(designer_prompt_json, designer)
+    step_generator = _resolve_opcad_generator(designer_prompt_json, designer, step_generator_agent)
 
     designer_response = designer.generate(prompt=designer_prompt, img=None, json_mode=False)
 
@@ -1137,5 +1164,7 @@ if __name__ == "__main__":
         designer_source=args.designer_source,
         critic_source=args.critic_source,
         designer_lm_id=args.designer_lm_id,
-        critic_lm_id=args.critic_lm_id
+        critic_lm_id=args.critic_lm_id,
+        step_generator_source=args.step_generator_source,
+        step_generator_lm_id=args.step_generator_lm_id
     )
