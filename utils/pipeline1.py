@@ -50,6 +50,12 @@ argparser.add_argument('--designer_lm_id', type=str, default='o3-mini')
 argparser.add_argument('--critic_lm_id', type=str, default='gpt-4o')
 argparser.add_argument('--step_generator_source', type=str, default=None)
 argparser.add_argument('--step_generator_lm_id', type=str, default=None)
+argparser.add_argument(
+    '--exec_python',
+    type=str,
+    default=os.environ.get('ROBOTSMITH_EXEC_PYTHON', sys.executable),
+    help='Python interpreter used by subprocesses that execute generated model code.'
+)
 args = argparser.parse_args()
 
 
@@ -1063,7 +1069,7 @@ def run_tool_design(task_name, task_prompt_json_dir,
             })
 
             result = subprocess.run(
-                ["python3", code_filename],
+                [args.exec_python, code_filename],
                 capture_output=True,
                 text=True,
                 timeout=300

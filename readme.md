@@ -83,6 +83,14 @@ This stage involves generating the tool and planning how it will be used. Execut
 python utils/pipeline1.py --task_name {TASK_NAME} --task_prompt_json_dir {PROJECT_PATH_PREFIX}/RobotSmith/{TASK_NAME}/task_prompt.json
 ```
 
+If you need generated model code to run with a different Python interpreter/environment, pass:
+
+```
+python utils/pipeline1.py ... --exec_python /path/to/other/env/bin/python
+```
+
+You can also set `ROBOTSMITH_EXEC_PYTHON=/path/to/other/env/bin/python` as the default.
+
 Choose from these tasks: `task01_calabash`, `task02_reaching`, `task03_flatten`, `task04_holder`, `task05_waterfill`, `task06_piggy`, `task07_lifting`, `task08_cutting`, `task09_transport`. 
 
 ### Optimization
