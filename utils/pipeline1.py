@@ -6,6 +6,7 @@ import random
 import time
 import re
 import trimesh
+import sys
 
 import backoff
 import os
