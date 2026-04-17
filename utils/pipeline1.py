@@ -507,10 +507,31 @@ def _ensure_stl_outputs(paths):
     return cleaned
 
 
-def generate_tool_from_steps(tool_json, designer_prompt_json, design_chat_history):
+def _resolve_opcad_generator(designer_prompt_json, fallback_generator):
+    opcad_cfg = designer_prompt_json.get("OPCAD_GENERATOR", {}) if isinstance(designer_prompt_json, dict) else {}
+    if not isinstance(opcad_cfg, dict):
+        opcad_cfg = {}
+    source = opcad_cfg.get("source")
+    model_id = opcad_cfg.get("lm_id")
+    if source and model_id:
+        append_execution_log(log_dir, f"Using dedicated OP-CAD generator: source={source}, lm_id={model_id}")
+        return Generator(
+            lm_source=source,
+            lm_id=model_id,
+            max_tokens=opcad_cfg.get("max_tokens", 16000),
+            temperature=opcad_cfg.get("temperature", 0.2),
+            top_p=opcad_cfg.get("top_p", 1.0),
+            logger=None
+        )
+    return fallback_generator
+
+
+def generate_tool_from_steps(tool_json, designer_prompt_json, design_chat_history, step_generator=None):
     steps = tool_json.get("construction_steps", None)
     if not steps:
         raise ValueError("construction_steps is required for OP-CAD incremental generation")
+    if step_generator is None:
+        raise ValueError("A step generator is required for OP-CAD incremental generation")
 
     current_code = """
 def assemble(parts):
@@ -525,7 +546,7 @@ def assemble(parts):
             step_id=step_id,
             instruction=instruction,
         )
-        llm_response = designer.generate(
+        llm_response = step_generator.generate(
             prompt=prompt,
             img=None,
             json_mode=False,
@@ -820,6 +841,7 @@ def run_tool_design(task_name, task_prompt_json_dir, designer_source='azure', cr
     designer_prompt = designer_prompt.replace("$GOAL_DESCRIPTION$", designer_prompt_json['GOAL_DESCRIPTION'])
     designer_prompt = designer_prompt.replace("$3D_CONFIGURATION$", designer_prompt_json['3D_CONFIGURATION'])
     designer_prompt = designer_prompt.replace("$TIPS_FOR_DESIGNER$", designer_prompt_json['TIPS_FOR_DESIGNER'])
+    step_generator = _resolve_opcad_generator(designer_prompt_json, designer)
     
     designer_response = designer.generate(prompt=designer_prompt, img=None, json_mode=False)
 
@@ -838,7 +860,8 @@ def run_tool_design(task_name, task_prompt_json_dir, designer_source='azure', cr
                 stepwise_assemble_func = generate_tool_from_steps(
                     tool_json=designer_response,
                     designer_prompt_json=designer_prompt_json,
-                    design_chat_history=design_chat_history
+                    design_chat_history=design_chat_history,
+                    step_generator=step_generator
                 )
                 if stepwise_assemble_func:
                     designer_response["assemble_func"] = stepwise_assemble_func
