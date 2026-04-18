@@ -712,11 +712,9 @@ def generate_tool_from_steps(tool_json, designer_prompt_json, design_chat_histor
 
 def write_design_code(filename, tool_json):
     outp = ''
-    print('tool_json', tool_json)
-
-    with open(os.path.join(project_path, 'utils', 'api_tool_design.py'), 'r') as fi:
-        outp += fi.read()
-        outp += '\n\n\n\n\n'
+    outp += 'import cadquery as cq\n'
+    outp += 'from cadquery import Plane, Vector\n'
+    outp += 'import trimesh\n\n\n'
 
     outp += tool_json['assemble_func']
     outp += '\n\n\n'
@@ -730,8 +728,6 @@ def write_design_code(filename, tool_json):
 
     outp += 'filenames = assemble(parts)\n'
     outp += 'print(filenames)\n'
-
-    print(outp)
 
     with open(filename, 'w') as fo:
         fo.write(outp)
