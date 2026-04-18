@@ -586,6 +586,20 @@ def _normalize_incremental_step_code(step_code: str, step_id: int) -> str:
 
     last_assign = _find_last_result_assignment(step_code)
     if last_assign is None:
+        # 容错：有些模型会只写 "return result_x" 或 "return result_n"
+        return_match = re.search(r"(?m)^\s*return\s+(result(?:_\d+|_n)?)\s*$", step_code)
+        if return_match:
+            returned_var = return_match.group(1)
+            if prev_var is not None and returned_var in {"result", "result_n"}:
+                returned_var = prev_var
+            step_code = re.sub(
+                r"(?m)^\s*return\s+result(?:_\d+|_n)?\s*$",
+                f"{next_var} = {returned_var}",
+                step_code,
+                count=1,
+            )
+            return step_code.strip()
+
         raise ValueError(
             f"Step {step_id} code must contain a final assignment to result / result_x."
         )
