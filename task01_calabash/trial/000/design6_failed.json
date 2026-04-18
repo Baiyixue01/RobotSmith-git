@@ -1,0 +1,26 @@
+{
+    "name": "calabash_shaper",
+    "functional_purpose": "shape the cubic dough into a calabash-like shape",
+    "construction_steps": [
+        {
+            "step_id": 0,
+            "Instruction": "Add a flat, curved surface",
+            "reason": "this surface will help shape the dough",
+            "is_graspable": false
+        },
+        {
+            "step_id": 1,
+            "Instruction": "Add a curved, cylindrical handle",
+            "reason": "the robot arm will grasp this handle to shape the dough",
+            "is_graspable": true
+        }
+    ],
+    "simulation_properties": {
+        "density": 1000,
+        "friction": 0.5,
+        "restitution": 0.1,
+        "is_graspable_default": true
+    },
+    "placement_func": "def placement():\n    self.tool = self.scene.add_entity(\n        gs.Morph.Mesh(\n            filename=\"assembled_tool.stl\",\n            pos=(0.0, 0.0, 0.0),\n            euler=(0, 0, 0),\n            scale=(1, 1, 1),\n        )\n    )\n    self.tool.density = 1000\n    self.tool.friction = 0.5\n    self.tool.restitution = 0.1\n",
+    "assemble_func": "def assemble(parts):\n    #shape\n    wp = cq.Workplane(inPlane=Plane(origin=(0, 0, 0), normal=Vector(0, 0, 1), xDir=Vector(1, 0, 0)))\n    shape = wp\n    #bool\n    result_0 = shape\n\n    #shape\n    wp = cq.Workplane(inPlane=Plane(origin=(0, 0, 0), normal=Vector(0, 0, 1), xDir=Vector(1, 0, 0)))\n    shape = wp\n    shape = (shape\n        .moveTo(0, 0)\n        .lineTo(12.5, 0)\n        .lineTo(16.5, 6.5)\n        .threePointArc((16.9921, 7.0071), (17.5, 6.5))\n        .lineTo(17.5, 5)\n        .lineTo(17.5, 4)\n        .lineTo(16.5, 2.5)\n        .threePointArc((16.9921, 2.9921), (17.5, 3.5))\n        .lineTo(17.5, 2)\n        .lineTo(17.5, 0)\n        .lineTo(0, 0)\n        .close()\n    )\n    #bool\n    result_1 = result_0.union(shape)\n\n    out_path = \"assembled_tool.stl\"\n    cq.exporters.export(result_1, out_path)\n    return _ensure_stl_outputs([out_path])\n\n\ndef _ensure_stl_outputs(paths):\n    normalized = []\n    for p in paths:\n        ext = \".\" + p.rsplit(\".\", 1)[-1].lower() if \".\" in p else \"\"\n        if ext == \".stl\":\n            normalized.append(p)\n            continue\n        mesh = trimesh.load(p, force='mesh')\n        if isinstance(mesh, trimesh.Scene):\n            mesh = trimesh.util.concatenate([g for g in mesh.geometry.values()])\n        stl_path = (p.rsplit(\".\", 1)[0] if \".\" in p else p) + \".stl\"\n        mesh.export(stl_path)\n        normalized.append(stl_path)\n    return normalized\n"
+}
