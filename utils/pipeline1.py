@@ -742,7 +742,8 @@ ALLOWED_CALL_ROOTS = {
     "get_axis_align_bounding_box", "get_volume", "rescale", "move",
     "empty_grid", "add_mesh", "sub_mesh", "cut_grid", "grid_to_mesh",
     "trimesh", "assemble", "Plane", "Vector", "Workplane",
-    "len", "range", "float", "int", "str", "list", "dict", "tuple", "set",
+    "_ensure_stl_outputs",
+    "len", "range", "float", "int", "str", "list", "dict", "tuple", "set", "isinstance",
     "abs", "min", "max", "sum", "enumerate", "zip"
 }
 BLOCKED_ROOTS = {
