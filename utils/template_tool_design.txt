@@ -14,9 +14,14 @@ Before writing construction steps, you MUST reason in this order:
 2) derive what geometric capabilities/shapes are needed to achieve that purpose;
 3) decompose into executable construction steps.
 The construction decomposition should follow this style:
-- step 1: Add a [shape]
-- step 2: Add/Remove [shape] at [position]
-- each next step only edits the existing intermediate tool
+- step 1: Add a [shape], built by {extruding/revolving} from [sketch]
+- step 2: Add/Remove a [shape] at [position], built by {extruding/revolving} from [sketch]
+- each next step must only edit the existing intermediate tool
+- for every added or removed part, explicitly state:
+  1) the target shape,
+  2) whether it is created by extrusion or revolution,
+  3) the source sketch/profile used to create it,
+  4) its placement relative to the current tool
 
 Output JSON should follow this structure (schema-style, not a literal fixed instance):
 ```json
@@ -30,7 +35,7 @@ Output JSON should follow this structure (schema-style, not a literal fixed inst
         {
             "step_id": 0,
             "Instruction": a string describing one decomposed modeling instruction for building the tool
-                (e.g., "Add an elongated rectangular bar handle"),
+                (e.g., "Add a long handle by extruding a rectangular sketch."),
             "reason": a one-sentence explanation of why this step helps accomplish the task
                 (e.g., "the robot needs the handle to hold the spoon"),
             "is_graspable": True/False. If True, the robot arm can grasp this part; otherwise, it cannot
