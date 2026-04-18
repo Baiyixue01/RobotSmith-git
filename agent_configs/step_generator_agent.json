@@ -1,0 +1,9 @@
+{
+  "lm_source": "openai",
+  "lm_id": "gpt-4o-mini",
+  "api_key": "",
+  "base_url": "",
+  "max_tokens": 16000,
+  "temperature": 0.2,
+  "top_p": 1.0
+}

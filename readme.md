@@ -72,7 +72,16 @@ rm ompl-1.6.0-cp39-cp39-manylinux_2_28_x86_64.whl
 
 ## User Guide
 
-To use this project, first ensure your API keys are configured correctly: your OpenAI API key should be in api_keys.json and your Meshy API key in meshy_api_key.txt, both located at the project's root path.
+To use this project, first ensure your API keys are configured correctly.  
+- For Azure mode, keep Azure OpenAI keys in `api_keys.json` at the project root.  
+- For per-agent OpenAI-compatible endpoints, edit:
+  - `agent_configs/designer_agent.json`
+  - `agent_configs/critic_agent.json`
+  - `agent_configs/step_generator_agent.json`
+
+Each per-agent config supports `lm_source`, `lm_id`, `api_key`, and `base_url`. This allows each agent to call a different OpenAI-compatible API endpoint.
+
+Your Meshy API key should be in `meshy_api_key.txt` at the project root path.
 
 
 ### Step 1: Tool Design and Planning
