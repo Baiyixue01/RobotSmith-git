@@ -51,6 +51,9 @@ argparser.add_argument('--designer_lm_id', type=str, default='o3-mini')
 argparser.add_argument('--critic_lm_id', type=str, default='gpt-4o')
 argparser.add_argument('--step_generator_source', type=str, default=None)
 argparser.add_argument('--step_generator_lm_id', type=str, default=None)
+argparser.add_argument('--designer_agent_config', type=str, default=os.path.join(project_path, 'agent_configs', 'designer_agent.json'))
+argparser.add_argument('--critic_agent_config', type=str, default=os.path.join(project_path, 'agent_configs', 'critic_agent.json'))
+argparser.add_argument('--step_generator_agent_config', type=str, default=os.path.join(project_path, 'agent_configs', 'step_generator_agent.json'))
 argparser.add_argument(
     '--exec_python',
     type=str,
@@ -78,12 +81,14 @@ def encode_image(img: Union[str, Image.Image]) -> str:
         raise Exception("img can only be either str or Image.Image")
 
 class Generator:
-    def __init__(self, lm_source, lm_id, max_tokens=4096, temperature=0.7, top_p=1, logger=None):
+    def __init__(self, lm_source, lm_id, max_tokens=4096, temperature=0.7, top_p=1, logger=None, api_key=None, base_url=None):
         self.lm_source = lm_source
         self.lm_id = lm_id
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.top_p = top_p
+        self.api_key = api_key
+        self.base_url = base_url
         self.logger = logger
         self.caller_analysis = {}
         if self.logger is None:
@@ -112,10 +117,13 @@ class Generator:
             self.output_token_price = -2 * 10 ** -6
         if self.lm_source == "openai":
             from openai import OpenAI
+            api_key = self.api_key if self.api_key else os.environ.get('OPENAI_API_KEY')
+            base_url = self.base_url if self.base_url else os.environ.get('OPENAI_BASE_URL')
             self.client = OpenAI(
-                api_key=os.environ['OPENAI_API_KEY'],  # this is also the default, it can be omitted
+                api_key=api_key,
+                base_url=base_url,
                 max_retries=self.max_retries,
-            ) if 'OPENAI_API_KEY' in os.environ else None
+            ) if api_key else None
         elif self.lm_source == "azure":
             from openai import AzureOpenAI
             try:
@@ -367,35 +375,103 @@ designer = None
 critic = None
 step_generator_agent = None
 
+def _load_agent_config(path):
+    if not path:
+        return {}
+    resolved = os.path.expanduser(path)
+    if not os.path.isabs(resolved):
+        resolved = os.path.join(project_path, resolved)
+    if not os.path.exists(resolved):
+        return {}
+    with open(resolved, 'r') as f:
+        cfg = json.load(f)
+    if not isinstance(cfg, dict):
+        return {}
+    return cfg
+
+def _resolve_agent_settings(
+    role,
+    cli_source,
+    cli_lm_id,
+    config_path=None,
+    default_source='azure',
+    default_lm_id='gpt-4o',
+):
+    cfg = _load_agent_config(config_path)
+    if cfg:
+        append_execution_log(log_dir, f"[agent-config] loaded {role} config from {config_path}")
+    source = cli_source or cfg.get("lm_source") or default_source
+    lm_id = cli_lm_id or cfg.get("lm_id") or default_lm_id
+    return {
+        "lm_source": source,
+        "lm_id": lm_id,
+        "api_key": cfg.get("api_key"),
+        "base_url": cfg.get("base_url"),
+        "max_tokens": cfg.get("max_tokens", 16000),
+        "temperature": cfg.get("temperature", 0.7),
+        "top_p": cfg.get("top_p", 1.0),
+    }
+
 
 def init_agents(designer_source='azure', critic_source='azure', designer_lm_id='o3-mini', critic_lm_id='gpt-4o',
-                step_generator_source=None, step_generator_lm_id=None):
+                step_generator_source=None, step_generator_lm_id=None,
+                designer_config_path=None, critic_config_path=None, step_generator_config_path=None):
     global designer, critic, step_generator_agent
+    designer_settings = _resolve_agent_settings(
+        role="designer",
+        cli_source=designer_source,
+        cli_lm_id=designer_lm_id,
+        config_path=designer_config_path,
+        default_source='azure',
+        default_lm_id='o3-mini'
+    )
+    critic_settings = _resolve_agent_settings(
+        role="critic",
+        cli_source=critic_source,
+        cli_lm_id=critic_lm_id,
+        config_path=critic_config_path,
+        default_source='azure',
+        default_lm_id='gpt-4o'
+    )
     designer = Generator(
-        lm_source=designer_source,
-        lm_id=designer_lm_id,
-        max_tokens=16000,
-        temperature=0.7,
-        top_p=1.0,
-        logger=None
+        lm_source=designer_settings["lm_source"],
+        lm_id=designer_settings["lm_id"],
+        max_tokens=designer_settings["max_tokens"],
+        temperature=designer_settings["temperature"],
+        top_p=designer_settings["top_p"],
+        logger=None,
+        api_key=designer_settings["api_key"],
+        base_url=designer_settings["base_url"],
     )
     step_generator_agent = None
-    if step_generator_source and step_generator_lm_id:
+    step_settings = _resolve_agent_settings(
+        role="step_generator",
+        cli_source=step_generator_source,
+        cli_lm_id=step_generator_lm_id,
+        config_path=step_generator_config_path,
+        default_source=None,
+        default_lm_id=None
+    )
+    if step_settings["lm_source"] and step_settings["lm_id"]:
         step_generator_agent = Generator(
-            lm_source=step_generator_source,
-            lm_id=step_generator_lm_id,
-            max_tokens=16000,
-            temperature=0.2,
-            top_p=1.0,
-            logger=None
+            lm_source=step_settings["lm_source"],
+            lm_id=step_settings["lm_id"],
+            max_tokens=step_settings["max_tokens"],
+            temperature=step_settings["temperature"],
+            top_p=step_settings["top_p"],
+            logger=None,
+            api_key=step_settings["api_key"],
+            base_url=step_settings["base_url"],
         )
     critic = Generator(
-        lm_source=critic_source,
-        lm_id=critic_lm_id,
-        max_tokens=16000,
-        temperature=0.7,
-        top_p=1.0,
-        logger=None
+        lm_source=critic_settings["lm_source"],
+        lm_id=critic_settings["lm_id"],
+        max_tokens=critic_settings["max_tokens"],
+        temperature=critic_settings["temperature"],
+        top_p=critic_settings["top_p"],
+        logger=None,
+        api_key=critic_settings["api_key"],
+        base_url=critic_settings["base_url"],
     )
 
 def parse_json(prompt, response, last_call=False):
@@ -1047,14 +1123,18 @@ def _resolve_task_prompt_json_path(task_prompt_json_dir: str, task_name: str = N
 def run_tool_design(task_name, task_prompt_json_dir,
                     designer_source='azure', critic_source='azure',
                     designer_lm_id='o3-mini', critic_lm_id='gpt-4o',
-                    step_generator_source=None, step_generator_lm_id=None):
+                    step_generator_source=None, step_generator_lm_id=None,
+                    designer_config_path=None, critic_config_path=None, step_generator_config_path=None):
     init_agents(
         designer_source=designer_source,
         critic_source=critic_source,
         designer_lm_id=designer_lm_id,
         critic_lm_id=critic_lm_id,
         step_generator_source=step_generator_source,
-        step_generator_lm_id=step_generator_lm_id
+        step_generator_lm_id=step_generator_lm_id,
+        designer_config_path=designer_config_path,
+        critic_config_path=critic_config_path,
+        step_generator_config_path=step_generator_config_path,
     )
 
     append_execution_log(
@@ -1243,5 +1323,8 @@ if __name__ == "__main__":
         designer_lm_id=args.designer_lm_id,
         critic_lm_id=args.critic_lm_id,
         step_generator_source=args.step_generator_source,
-        step_generator_lm_id=args.step_generator_lm_id
+        step_generator_lm_id=args.step_generator_lm_id,
+        designer_config_path=args.designer_agent_config,
+        critic_config_path=args.critic_agent_config,
+        step_generator_config_path=args.step_generator_agent_config,
     )
