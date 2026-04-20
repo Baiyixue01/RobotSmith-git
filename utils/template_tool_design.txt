@@ -1,78 +1,58 @@
-Now you have a robotic task: 
+Now you have a robotic task:
 
 On the table, there is a robot arm with a parallel gripper, $3D_OBJECT_DESCRIPTION$. The task goal is to $GOAL_DESCRIPTION$. For more detailed scene setup, here is a code:
 
 $3D_CONFIGURATION$
 
-You need to design a tool to help finish the task. 
+You need to design a tool to help finish the task.
 
-To describe a generated tool, you will use a json format.
-IMPORTANT: first decompose the tool construction into explicit step-by-step operations,
-then provide simulation/placement metadata.
-Before writing construction steps, you MUST reason in this order:
-1) analyze the scene/task and infer the tool's functional purpose;
-2) derive what geometric capabilities/shapes are needed to achieve that purpose;
-3) decompose into executable construction steps.
+To describe the generated tool, you must use a JSON format.
+IMPORTANT: first decompose the tool construction into explicit step-by-step CAD modeling operations, then provide simulation and placement metadata.
+
+The goal of construction_steps is geometric executability, not high-level design explanation.
+
 The construction decomposition should follow this style:
-- step 1: Add a [shape], built by {extruding/revolving} from [sketch]
-- step 2: Add/Remove a [shape] at [position], built by {extruding/revolving} from [sketch]
-- each next step must only edit the existing intermediate tool
+  - Extruding : Add/Remove a [shape] at [position description(if this is not first step)], built by extruding [sketch description] by [distance].
+  - Revolving: Add/Remove a [shape] at [position description(if this is not first step)], built by revolving [sketch description] around [axis/edge] by [angle].
 - for every added or removed part, explicitly state:
   1) the target shape,
   2) whether it is created by extrusion or revolution,
   3) the source sketch/profile used to create it,
-  4) its placement relative to the current tool
+  4) its placement relative to the current tool.
+- Use concise CAD-style wording on.
+- Do not use vague appearance-oriented descriptions such as "smooth", "organic", "nice-looking", "ergonomic", "bulbous", or similar wording.
+- Do not describe what the tool will do to the object inside Instruction; describe only the geometry being added or removed.
+
 
 Output JSON should follow this structure (schema-style, not a literal fixed instance):
 ```json
 {
-    "name": a string for the name of the tool (e.g., "long-handled spoon"),
+  "name": "a string for the name of the tool",
 
-    "functional_purpose": a string describing the functional goal of the tool according to the task requirement
-        (e.g., "scoop water from one bucket and pour it into another container"),
-
-    "construction_steps": [
-        {
-            "step_id": 0,
-            "Instruction": a string describing one decomposed modeling instruction for building the tool
-                (e.g., "Add a long handle by extruding a rectangular sketch."),
-            "reason": a one-sentence explanation of why this step helps accomplish the task
-                (e.g., "the robot needs the handle to hold the spoon"),
-            "is_graspable": True/False. If True, the robot arm can grasp this part; otherwise, it cannot
-                (e.g., True)
-        },
-        {
-            "step_id": 1,
-            "Instruction": ...,
-            "reason": ...,
-            "is_graspable": ...
-        },
-        ...
-    ],
-
-    "simulation_properties": {
-        "density": a positive float (kg/m^3-like scale),
-        "friction": a float in [0, 2],
-        "restitution": a float in [0, 1],
-        "is_graspable_default": True/False
+  "construction_steps": [
+    {
+      "step_id": 0,
+      "Instruction": "a string describing one explicit geometric modeling edit, e.g. Add a long handle, built by extruding a rectangular sketch, placed along the central axis of the cube.",
+      "label": "a short abstract part label for the part introduced or modified in this step, e.g. handle",
+      "is_graspable": True/False. If True, the robot arm can grasp this part; otherwise, it cannot
     },
+    {
+      "step_id": 1,
+      "Instruction": "...",
+      "label": "...",
+      "is_graspable": ...
+    },
+    ...
+  ],
 
-    "placement_func": a complete Python code snippet for placing the tool in the scene.
-        """
-        def placement():
-            self.tool = scene.add_entity(
-                gs.Morph.Mesh(
-                    filename="tool.stl",
-                    pos=(0.0, 0.0, 0.0),
-                    euler=(0, 0, 0),
-                    scale=(1, 1, 1),
-                )
-            )
-            # The filename here should match a generated mesh file (.stl or .obj).
-            # The position, rotation, and scale should be appropriate for the scene.
-            # If supported by the simulator API, use simulation_properties to set density,
-            # friction, and restitution.
-        """
+  "simulation_properties": {
+    "density": 1000.0,
+    "friction": 0.8,
+    "restitution": 0.1,
+    "is_graspable_default": true
+  },
+
+  "placement_func": "def placement():\n    self.tool = scene.add_entity(\n        gs.Morph.Mesh(\n            filename=\"assembled_tool.stl\",\n            pos=(0.0, 0.0, 0.0),\n            euler=(0, 0, 0),\n            scale=(1, 1, 1),\n        )\n    )"
 }
 ```
 
