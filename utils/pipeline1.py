@@ -972,17 +972,6 @@ def append_execution_log(log_dir, message):
     with open(os.path.join(log_dir, "execution.log"), "a") as f:
         f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {message}\n")
 
-def look_at(cam_pos, target=np.array([0, 0, 0]), up=np.array([0, 0, 1])):
-    forward = (target - cam_pos)
-    forward /= np.linalg.norm(forward)
-    right = np.cross(up, forward)
-    right /= np.linalg.norm(right)
-    up = np.cross(forward, right)
-    R = np.eye(4)
-    R[:3, :3] = np.stack([right, up, -forward], axis=1)
-    R[:3, 3] = -cam_pos
-    return np.linalg.inv(R)
-
 def render_and_save(mesh_path, output_folder, num_views=10):
     os.makedirs(output_folder, exist_ok=True)
 
@@ -991,12 +980,12 @@ def render_and_save(mesh_path, output_folder, num_views=10):
     mesh.translate(-mesh.get_center())        
     vertices = np.asarray(mesh.vertices)
 
-    vis = o3d.visualization.Visualizer()
-    vis.create_window(visible=False, width=640, height=480)
-    vis.add_geometry(mesh)
-    opt = vis.get_render_option()
-    opt.light_on = True
-    opt.background_color = np.array([1, 1, 1]) 
+    width, height = 640, 480
+    renderer = o3d.visualization.rendering.OffscreenRenderer(width, height)
+    renderer.scene.set_background(np.array([1.0, 1.0, 1.0, 1.0]))
+    material = o3d.visualization.rendering.MaterialRecord()
+    material.shader = "defaultLit"
+    renderer.scene.add_geometry("mesh", mesh, material)
 
     for i in range(num_views):
         # Random camera position on a sphere
@@ -1008,24 +997,18 @@ def render_and_save(mesh_path, output_folder, num_views=10):
         z = radius * np.cos(phi)
         cam_pos = np.array([x, y, z])
 
-        # Compute extrinsic
-        extrinsic = look_at(cam_pos)
-
         # Set the view
-        ctr = vis.get_view_control()
-        param = ctr.convert_to_pinhole_camera_parameters()
-        param.extrinsic = extrinsic
-        ctr.convert_from_pinhole_camera_parameters(param)
-
-        vis.poll_events()
-        vis.update_renderer()
+        renderer.scene.camera.look_at(
+            center=np.array([0.0, 0.0, 0.0]),
+            eye=cam_pos,
+            up=np.array([0.0, 0.0, 1.0]),
+        )
 
         # Save image
-        img = vis.capture_screen_float_buffer(False)
-        img = (255 * np.asarray(img)).astype(np.uint8)
-        o3d.io.write_image(f"{output_folder}/{i:03d}.png", o3d.geometry.Image(img))
+        img = renderer.render_to_image()
+        o3d.io.write_image(f"{output_folder}/{i:03d}.png", img)
 
-    vis.destroy_window()
+    del renderer
 
 def render_and_save_with_objects(mesh_path, json_filename, output_folder, num_views=10):
     os.makedirs(output_folder, exist_ok=True)
@@ -1086,12 +1069,12 @@ def render_and_save_with_objects(mesh_path, json_filename, output_folder, num_vi
     mesh.translate(-mesh.get_center())        
     vertices = np.asarray(mesh.vertices)
 
-    vis = o3d.visualization.Visualizer()
-    vis.create_window(visible=False, width=640, height=480)
-    vis.add_geometry(mesh)
-    opt = vis.get_render_option()
-    opt.light_on = True
-    opt.background_color = np.array([1, 1, 1]) 
+    width, height = 640, 480
+    renderer = o3d.visualization.rendering.OffscreenRenderer(width, height)
+    renderer.scene.set_background(np.array([1.0, 1.0, 1.0, 1.0]))
+    material = o3d.visualization.rendering.MaterialRecord()
+    material.shader = "defaultLit"
+    renderer.scene.add_geometry("mesh", mesh, material)
 
     for i in range(num_views):
         # Random camera position on a sphere
@@ -1103,24 +1086,18 @@ def render_and_save_with_objects(mesh_path, json_filename, output_folder, num_vi
         z = radius * np.cos(phi)
         cam_pos = np.array([x, y, z])
 
-        # Compute extrinsic
-        extrinsic = look_at(cam_pos)
-
         # Set the view
-        ctr = vis.get_view_control()
-        param = ctr.convert_to_pinhole_camera_parameters()
-        param.extrinsic = extrinsic
-        ctr.convert_from_pinhole_camera_parameters(param)
-
-        vis.poll_events()
-        vis.update_renderer()
+        renderer.scene.camera.look_at(
+            center=np.array([0.0, 0.0, 0.0]),
+            eye=cam_pos,
+            up=np.array([0.0, 0.0, 1.0]),
+        )
 
         # Save image
-        img = vis.capture_screen_float_buffer(False)
-        img = (255 * np.asarray(img)).astype(np.uint8)
-        o3d.io.write_image(f"{output_folder}/{i:03d}.png", o3d.geometry.Image(img))
+        img = renderer.render_to_image()
+        o3d.io.write_image(f"{output_folder}/{i:03d}.png", img)
 
-    vis.destroy_window()
+    del renderer
 
 def render_and_save_with_genesis(mesh_path, output_folder, num_views=10):
     os.makedirs(output_folder, exist_ok=True)
