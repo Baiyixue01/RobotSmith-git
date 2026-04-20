@@ -45,10 +45,10 @@ import argparse
 argparser = argparse.ArgumentParser()
 argparser.add_argument('--task_name', type=str)
 argparser.add_argument('--task_prompt_json_dir', type=str)
-argparser.add_argument('--designer_source', type=str, default='azure')
-argparser.add_argument('--critic_source', type=str, default='azure')
-argparser.add_argument('--designer_lm_id', type=str, default='o3-mini')
-argparser.add_argument('--critic_lm_id', type=str, default='gpt-4o')
+argparser.add_argument('--designer_source', type=str, default=None)
+argparser.add_argument('--critic_source', type=str, default=None)
+argparser.add_argument('--designer_lm_id', type=str, default=None)
+argparser.add_argument('--critic_lm_id', type=str, default=None)
 argparser.add_argument('--step_generator_source', type=str, default=None)
 argparser.add_argument('--step_generator_lm_id', type=str, default=None)
 argparser.add_argument('--designer_agent_config', type=str, default=os.path.join(project_path, 'agent_configs', 'designer_agent.json'))
@@ -117,13 +117,23 @@ class Generator:
             self.output_token_price = -2 * 10 ** -6
         if self.lm_source == "openai":
             from openai import OpenAI
-            api_key = self.api_key if self.api_key else os.environ.get('OPENAI_API_KEY')
-            base_url = self.base_url if self.base_url else os.environ.get('OPENAI_BASE_URL')
+            import httpx
+
+            api_key = self.api_key if self.api_key is not None else os.environ.get("OPENAI_API_KEY")
+            base_url = self.base_url if self.base_url is not None else os.environ.get("OPENAI_BASE_URL")
+
+            http_client = httpx.Client(
+                verify=False,
+                trust_env=False,
+                timeout=60.0,
+            )
+
             self.client = OpenAI(
                 api_key=api_key,
                 base_url=base_url,
                 max_retries=self.max_retries,
-            ) if api_key else None
+                http_client=http_client,
+            ) if api_key is not None else None
         elif self.lm_source == "azure":
             from openai import AzureOpenAI
             try:
@@ -314,7 +324,7 @@ class Generator:
             return _generate()
         except Exception as e:
             self.logger.error(f"Error with openai_generate: {e}, the prompt was:\n {prompt}")
-            return None
+            raise
 
     def gemini_generate(self, prompt):
         try:
@@ -475,9 +485,11 @@ def init_agents(designer_source='azure', critic_source='azure', designer_lm_id='
     )
 
 def parse_json(prompt, response, last_call=False):
+    if response is None:
+        raise ValueError("Designer response is None before JSON parsing")
+
     json_str = None
     if "```json" in response:
-        # Step 1: Extract the JSON part
         start = response.find("```json") + len("```json")
         end = response.find("```", start)
         json_str = response[start:end].strip()
@@ -488,21 +500,26 @@ def parse_json(prompt, response, last_call=False):
                 {"role": "assistant", "content": response}
             ]
             data = designer.generate(
-                f"The output format is wrong. Output the formatted json string enclosed in ```json``` only! Do not include any other character in the output!", chat_history=chat_history)
+                "The output format is wrong. Output the formatted json string enclosed in ```json``` only! Do not include any other character in the output!",
+                chat_history=chat_history
+            )
             return parse_json(None, data, last_call=True)
         else:
             return None
     try:
         response = json.loads(json_str)
-    except json.JSONDecodeError as e:
+    except json.JSONDecodeError:
         if not last_call:
             chat_history = [
                 {"role": "user", "content": prompt},
                 {"role": "assistant", "content": response}
             ]
             data = designer.generate(
-                f"The output format is wrong. Output the formatted json string enclosed in ```json``` only! Do not include any other character in the output!", chat_history=chat_history)
+                "The output format is wrong. Output the formatted json string enclosed in ```json``` only! Do not include any other character in the output!",
+                chat_history=chat_history
+            )
             return parse_json(None, data, last_call=True)
+        raise
     return response
 
 def parse_code_block(response, language_hint="python"):
@@ -962,8 +979,11 @@ def render_and_save_with_objects(mesh_path, json_filename, output_folder, num_vi
     mesh.export(repaired_mesh_path)
 
     mesh.apply_scale(tool_scale)
-    rotation = trimesh.transformers.euler_matrix(
-        math.radians(float(e1)), math.radians(float(e2)), math.radians(float(e3)), axes='sxyz'
+    rotation = trimesh.transformations.euler_matrix(
+        math.radians(float(e1)),
+        math.radians(float(e2)),
+        math.radians(float(e3)),
+        axes='sxyz'
     )
     mesh.apply_transform(rotation)
     mesh.apply_translation(tool_pos)

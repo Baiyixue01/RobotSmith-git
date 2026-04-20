@@ -87,7 +87,7 @@ def build_incremental_cq_prompt(
         linking_note = dedent("""
         ### Linking Notice
         - This is the **first modeling step**.
-        - Assign `result = shape` in **#bool**.
+        - Assign `result_0 = shape` in **#bool**.
         """).strip()
     else:
         # link_mode 仅用于“建议措辞”，不改变约束逻辑（保持原功能）
@@ -116,17 +116,18 @@ def build_incremental_cq_prompt(
     """).strip()
 
     # 非 modify：Shape-then-Bool（保持原功能：引用 cur_var/next_var 的 union/cut 形式）
+    
     shape_bool_rules = dedent(f"""
     ### Shape-then-Bool Rules (ENFORCED)
-    - You MUST output exactly two sections in this exact order: **#shape** then **#bool**.
-    - Under **#shape**: build required feature(s) as **independent solid(s)** without referencing **{cur_var if cur_var else 'previous results'}**.
+    - You MUST output exactly two sections in this exact order: #shape then #bool.
+    - Under #shape, include only shape construction code (including plane/workplane definition, sketch creation, and 3D feature generation).
       - If multiple bodies are created (e.g., shape_1, shape_2, ...), you MUST union them into a single solid and assign to shape:
         ```python
         shape = shape_1.union(shape_2)...union(shape_n)
         ```
-    - Under **#bool**: include exactly **one** boolean statement combining the current solid and `shape`:
-      - `result = result_n.union(shape)` OR `result = result_n.cut(shape)`
-      - `result = shape` is ONLY allowed when this is the first step (no previous code).
+    - Under #bool, include only the final boolean operation statement (exactly one of union or cut) that combines the current solid with shape.
+      - `{next_var_name} = {current_var_name}.union(shape)` OR `{next_var_name} = {current_var_name}.cut(shape)`
+      - `result_0 = shape` is ONLY allowed when this is the first step (no previous code).
     """).strip()
 
     # modify：fillet/chamfer（保持原功能：禁止 edges(...).fillet(...) 链式；要求两步变量）
@@ -243,17 +244,18 @@ Perform the following operation **as a continuation** of the existing model:
 
 if __name__ == "__main__":
     # ====== 1) 准备一个 previous_code（模拟已执行的上下文）======
-    previous_code = dedent("""sdasdas
-    """).strip()
+    previous_code = dedent("""
+""").strip()
 
     # ====== 2) 准备一个操作指令 ======
-    operation_instruction = "Remove a cylindrical through hole at the center of the top face."
+    operation_instruction = "Add a vertical cylindrical base by extruding a circular sketch with radius 0.04m and height 0.08m along the Z-axis."
 
     # ====== 3) 生成训练阶段 prompt（规则更硬）======
     prompt_train = build_incremental_cq_prompt(
         previous_code=previous_code,
         operation_instruction=operation_instruction,
-        next_var_name="result",
+        current_var_name="result_0",
+        next_var_name="result_1",
         op_kind="",              # 非 fillet/chamfer，走 shape+bool 规则
         allow_comments=False,
     )
