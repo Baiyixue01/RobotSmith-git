@@ -81,6 +81,11 @@ To use this project, first ensure your API keys are configured correctly.
 
 Each per-agent config supports `lm_source`, `lm_id`, `api_key`, and `base_url`. This allows each agent to call a different OpenAI-compatible API endpoint.
 
+For OpenAI-compatible endpoints, you can also control sync/async behavior per agent:
+- `use_async` (bool, default `false`): use `AsyncOpenAI` instead of sync `OpenAI`.
+- `stream` (bool, default `false`): only used when `use_async=true`; enables streaming responses and incrementally concatenates the final text.
+- `request_timeout` (number, default `40`): per-request timeout passed to the OpenAI SDK.
+
 Your Meshy API key should be in `meshy_api_key.txt` at the project root path.
 
 
