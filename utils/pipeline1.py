@@ -995,8 +995,9 @@ def render_and_save(mesh_path, output_folder, num_views=10):
     vis.create_window(visible=False, width=640, height=480)
     vis.add_geometry(mesh)
     opt = vis.get_render_option()
-    opt.light_on = True
-    opt.background_color = np.array([1, 1, 1]) 
+    if opt is not None:
+        opt.light_on = True
+        opt.background_color = np.array([1, 1, 1]) 
 
     for i in range(num_views):
         # Random camera position on a sphere
@@ -1090,8 +1091,9 @@ def render_and_save_with_objects(mesh_path, json_filename, output_folder, num_vi
     vis.create_window(visible=False, width=640, height=480)
     vis.add_geometry(mesh)
     opt = vis.get_render_option()
-    opt.light_on = True
-    opt.background_color = np.array([1, 1, 1]) 
+    if opt is not None:
+        opt.light_on = True
+        opt.background_color = np.array([1, 1, 1]) 
 
     for i in range(num_views):
         # Random camera position on a sphere
