@@ -7,6 +7,7 @@ import time
 import re
 import trimesh
 import sys
+import asyncio
 
 import backoff
 import os
@@ -81,7 +82,20 @@ def encode_image(img: Union[str, Image.Image]) -> str:
         raise Exception("img can only be either str or Image.Image")
 
 class Generator:
-    def __init__(self, lm_source, lm_id, max_tokens=4096, temperature=0.7, top_p=1, logger=None, api_key=None, base_url=None):
+    def __init__(
+        self,
+        lm_source,
+        lm_id,
+        max_tokens=4096,
+        temperature=0.7,
+        top_p=1,
+        logger=None,
+        api_key=None,
+        base_url=None,
+        use_async=False,
+        stream=False,
+        request_timeout=40,
+    ):
         self.lm_source = lm_source
         self.lm_id = lm_id
         self.max_tokens = max_tokens
@@ -89,6 +103,9 @@ class Generator:
         self.top_p = top_p
         self.api_key = api_key
         self.base_url = base_url
+        self.use_async = use_async
+        self.stream = stream
+        self.request_timeout = request_timeout
         self.logger = logger
         self.caller_analysis = {}
         if self.logger is None:
@@ -116,24 +133,37 @@ class Generator:
             self.input_token_price = -1 * 10 ** -6
             self.output_token_price = -2 * 10 ** -6
         if self.lm_source == "openai":
-            from openai import OpenAI
+            from openai import OpenAI, AsyncOpenAI
             import httpx
 
             api_key = self.api_key if self.api_key is not None else os.environ.get("OPENAI_API_KEY")
             base_url = self.base_url if self.base_url is not None else os.environ.get("OPENAI_BASE_URL")
 
-            http_client = httpx.Client(
-                verify=False,
-                trust_env=False,
-                timeout=60.0,
-            )
+            if self.use_async:
+                http_client = httpx.AsyncClient(
+                    verify=False,
+                    trust_env=False,
+                    timeout=60.0,
+                )
+                self.client = AsyncOpenAI(
+                    api_key=api_key,
+                    base_url=base_url,
+                    max_retries=self.max_retries,
+                    http_client=http_client,
+                ) if api_key is not None else None
+            else:
+                http_client = httpx.Client(
+                    verify=False,
+                    trust_env=False,
+                    timeout=60.0,
+                )
 
-            self.client = OpenAI(
-                api_key=api_key,
-                base_url=base_url,
-                max_retries=self.max_retries,
-                http_client=http_client,
-            ) if api_key is not None else None
+                self.client = OpenAI(
+                    api_key=api_key,
+                    base_url=base_url,
+                    max_retries=self.max_retries,
+                    http_client=http_client,
+                ) if api_key is not None else None
         elif self.lm_source == "azure":
             from openai import AzureOpenAI
             try:
@@ -276,42 +306,91 @@ class Generator:
                     "content": content
                 })
             start = time.perf_counter()
-            if self.lm_id[0] == 'o':
-                response = self.client.chat.completions.create(
-                    # reasoning_effort='high',
-                    model=self.lm_id,
-                    messages=messages,
-                    max_completion_tokens=max_tokens,
-                    timeout=40,
-                )
+            if self.use_async:
+                async def _async_generate():
+                    if self.lm_id[0] == 'o':
+                        request_kwargs = {
+                            "model": self.lm_id,
+                            "messages": messages,
+                            "max_completion_tokens": max_tokens,
+                            "timeout": self.request_timeout,
+                        }
+                    else:
+                        request_kwargs = {
+                            "model": self.lm_id,
+                            "messages": messages,
+                            "max_tokens": max_tokens,
+                            "temperature": temperature,
+                            "top_p": top_p,
+                            "response_format": {
+                                "type": "json_object" if json_mode else "text"
+                            },
+                            "timeout": self.request_timeout,
+                        }
+
+                    if self.stream:
+                        stream = await self.client.chat.completions.create(
+                            **request_kwargs,
+                            stream=True,
+                        )
+                        response_text = ""
+                        async for chunk in stream:
+                            if not chunk.choices:
+                                continue
+                            delta = chunk.choices[0].delta
+                            if delta and delta.content:
+                                response_text += delta.content
+                        return response_text, None
+
+                    response = await self.client.chat.completions.create(**request_kwargs)
+                    return response.choices[0].message.content, response
+
+                try:
+                    response_text, raw_response = asyncio.run(_async_generate())
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    try:
+                        response_text, raw_response = loop.run_until_complete(_async_generate())
+                    finally:
+                        loop.close()
             else:
-                response = self.client.chat.completions.create(
-                    model=self.lm_id,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    top_p=top_p,
-                    response_format={
-                        "type": "json_object" if json_mode else "text"
-                    },
-                    timeout=40,
-                )
+                if self.lm_id[0] == 'o':
+                    raw_response = self.client.chat.completions.create(
+                        # reasoning_effort='high',
+                        model=self.lm_id,
+                        messages=messages,
+                        max_completion_tokens=max_tokens,
+                        timeout=self.request_timeout,
+                    )
+                else:
+                    raw_response = self.client.chat.completions.create(
+                        model=self.lm_id,
+                        messages=messages,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        top_p=top_p,
+                        response_format={
+                            "type": "json_object" if json_mode else "text"
+                        },
+                        timeout=self.request_timeout,
+                    )
+                response_text = raw_response.choices[0].message.content
             self.logger.debug(f"api request time: {time.perf_counter() - start}")
             with open(f"chat_raw.jsonl", 'a') as f:
                 chat_entry = {
                     "prompt": prompt,
-                    "response": response.model_dump_json(indent=4)
+                    "response": raw_response.model_dump_json(indent=4) if raw_response is not None else response_text
                 }
                 # Write as a single JSON object per line
                 f.write(json.dumps(chat_entry))
                 f.write('\n')
-            usage = dict(response.usage)
-            self.cost += usage['completion_tokens'] * self.output_token_price + usage['prompt_tokens'] * self.input_token_price
-            if caller in self.caller_analysis:
-                self.caller_analysis[caller].append(usage['total_tokens'])
-            else:
-                self.caller_analysis[caller] = [usage['total_tokens']]
-            response = response.choices[0].message.content
+            if raw_response is not None and raw_response.usage is not None:
+                usage = dict(raw_response.usage)
+                self.cost += usage['completion_tokens'] * self.output_token_price + usage['prompt_tokens'] * self.input_token_price
+                if caller in self.caller_analysis:
+                    self.caller_analysis[caller].append(usage['total_tokens'])
+                else:
+                    self.caller_analysis[caller] = [usage['total_tokens']]
             # self.logger.debug(f'======= prompt ======= \n{prompt}', )
             # self.logger.debug(f'======= response ======= \n{response}')
             # self.logger.debug(f'======= usage ======= \n{usage}')
@@ -319,7 +398,7 @@ class Generator:
                 self.logger.critical(f'COST ABOVE 7 dollars! There must be sth wrong. Stop the exp immediately!')
                 raise Exception(f'COST ABOVE 7 dollars! There must be sth wrong. Stop the exp immediately!')
             self.logger.info(f'======= total cost ======= {self.cost}')
-            return response
+            return response_text
         try:
             return _generate()
         except Exception as e:
@@ -417,6 +496,9 @@ def _resolve_agent_settings(
         "lm_id": lm_id,
         "api_key": cfg.get("api_key"),
         "base_url": cfg.get("base_url"),
+        "use_async": cfg.get("use_async", False),
+        "stream": cfg.get("stream", False),
+        "request_timeout": cfg.get("request_timeout", 40),
         "max_tokens": cfg.get("max_tokens", 16000),
         "temperature": cfg.get("temperature", 0.7),
         "top_p": cfg.get("top_p", 1.0),
@@ -452,6 +534,9 @@ def init_agents(designer_source='azure', critic_source='azure', designer_lm_id='
         logger=None,
         api_key=designer_settings["api_key"],
         base_url=designer_settings["base_url"],
+        use_async=designer_settings["use_async"],
+        stream=designer_settings["stream"],
+        request_timeout=designer_settings["request_timeout"],
     )
     step_generator_agent = None
     step_settings = _resolve_agent_settings(
@@ -472,6 +557,9 @@ def init_agents(designer_source='azure', critic_source='azure', designer_lm_id='
             logger=None,
             api_key=step_settings["api_key"],
             base_url=step_settings["base_url"],
+            use_async=step_settings["use_async"],
+            stream=step_settings["stream"],
+            request_timeout=step_settings["request_timeout"],
         )
     critic = Generator(
         lm_source=critic_settings["lm_source"],
@@ -482,6 +570,9 @@ def init_agents(designer_source='azure', critic_source='azure', designer_lm_id='
         logger=None,
         api_key=critic_settings["api_key"],
         base_url=critic_settings["base_url"],
+        use_async=critic_settings["use_async"],
+        stream=critic_settings["stream"],
+        request_timeout=critic_settings["request_timeout"],
     )
 
 def parse_json(prompt, response, last_call=False):
