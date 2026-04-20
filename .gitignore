@@ -30,4 +30,6 @@ ext/Genesis/ext/*
 *npy
 test_api.py
 *OLD*
-agent_configs
+agent_configs/critic_agent.json
+agent_configs/designer_agent.json
+agent_configs/step_generator_agent.json
