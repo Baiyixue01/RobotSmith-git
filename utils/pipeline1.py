@@ -1258,6 +1258,7 @@ def run_tool_design(task_name, task_prompt_json_dir,
     while critic_cnt <= 5:
         critic_cnt += 1
         designer_response_parsed = None
+        attempt_dir = os.path.join(log_dir, str(critic_cnt))
 
         try:
             designer_response = parse_json(designer_prompt, designer_response)
@@ -1290,10 +1291,12 @@ def run_tool_design(task_name, task_prompt_json_dir,
             )
             designer_response["assemble_func"] = stepwise_assemble_func
 
-            json_filename = os.path.join(log_dir, f"design{critic_cnt}.json")
+            os.makedirs(attempt_dir, exist_ok=True)
+
+            json_filename = os.path.join(attempt_dir, f"design{critic_cnt}.json")
             json.dump(designer_response, open(json_filename, 'w'), indent=4)
 
-            code_filename = os.path.join(log_dir, f"design{critic_cnt}.py")
+            code_filename = os.path.join(attempt_dir, f"design{critic_cnt}.py")
 
             is_safe, safety_msg = static_validate_assemble_func(designer_response["assemble_func"])
             append_execution_log(log_dir, f"[critic {critic_cnt}] static validation: {safety_msg}")
@@ -1323,19 +1326,18 @@ def run_tool_design(task_name, task_prompt_json_dir,
 
             output_files = post_process_output_meshes(output_files, os.getcwd())
 
-            os.makedirs(f"{log_dir}/{critic_cnt}", exist_ok=True)
             imgs = []
 
             for output_file in output_files:
-                subprocess.run(["cp", output_file, f"{log_dir}/{critic_cnt}/"], check=False)
+                subprocess.run(["cp", output_file, attempt_dir], check=False)
                 render_and_save_with_objects(
-                    f"{log_dir}/{critic_cnt}/{os.path.basename(output_file)}",
+                    os.path.join(attempt_dir, os.path.basename(output_file)),
                     json_filename,
-                    f"{log_dir}/{critic_cnt}/rendered_views",
+                    os.path.join(attempt_dir, "rendered_views"),
                     num_views=5
                 )
                 for i in range(5):
-                    imgs.append(os.path.join(f"{log_dir}/{critic_cnt}/rendered_views", f"{i:03d}.png"))
+                    imgs.append(os.path.join(attempt_dir, "rendered_views", f"{i:03d}.png"))
 
             critic_prompt = open(os.path.join(project_path, 'utils', 'template_tool_critic.txt'), 'r').read()
             critic_prompt = critic_prompt.replace("$3D_OBJECT_DESCRIPTION$", designer_prompt_json['3D_OBJECT_DESCRIPTION'])
@@ -1365,10 +1367,11 @@ def run_tool_design(task_name, task_prompt_json_dir,
             append_execution_log(log_dir, f"{err_summary}\n{traceback.format_exc()}")
 
             if designer_response_parsed is not None:
-                fallback_json_filename = os.path.join(log_dir, f"design{critic_cnt}_failed.json")
+                os.makedirs(attempt_dir, exist_ok=True)
+                fallback_json_filename = os.path.join(attempt_dir, f"design{critic_cnt}_failed.json")
                 json.dump(designer_response_parsed, open(fallback_json_filename, 'w'), indent=4)
 
-            with open(os.path.join(log_dir, f"error_summary_{critic_cnt}.txt"), 'w') as fo:
+            with open(os.path.join(attempt_dir, f"error_summary_{critic_cnt}.txt"), 'w') as fo:
                 fo.write(err_summary + "\n")
                 fo.write(traceback.format_exc())
 
