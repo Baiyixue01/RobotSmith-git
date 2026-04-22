@@ -114,7 +114,7 @@ class Generator:
             self.logger.addHandler(logging.StreamHandler())
         self.max_retries = 3
         self.cost = 0 # cost in us dollars
-        self.cache_path = f"cache_{lm_id}.pkl"
+        self.cache_path = os.path.join(log_dir, f"cache_{lm_id}.pkl")
         if os.path.exists(self.cache_path):
             with open(self.cache_path, 'rb') as f:
                 self.cache = pickle.load(f)
@@ -376,7 +376,7 @@ class Generator:
                     )
                 response_text = raw_response.choices[0].message.content
             self.logger.debug(f"api request time: {time.perf_counter() - start}")
-            with open(f"chat_raw.jsonl", 'a') as f:
+            with open(os.path.join(log_dir, "chat_raw.jsonl"), 'a') as f:
                 chat_entry = {
                     "prompt": prompt,
                     "response": raw_response.model_dump_json(indent=4) if raw_response is not None else response_text
@@ -1314,7 +1314,8 @@ def run_tool_design(task_name, task_prompt_json_dir,
                 [args.exec_python, code_filename],
                 capture_output=True,
                 text=True,
-                timeout=300
+                timeout=300,
+                cwd=attempt_dir
             )
 
             if result.returncode != 0:
@@ -1324,7 +1325,7 @@ def run_tool_design(task_name, task_prompt_json_dir,
             if not isinstance(output_files, list):
                 raise ValueError("Output files should be a list")
 
-            output_files = post_process_output_meshes(output_files, os.getcwd())
+            output_files = post_process_output_meshes(output_files, attempt_dir)
 
             imgs = []
 
