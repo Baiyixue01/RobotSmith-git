@@ -7,7 +7,7 @@ set -euo pipefail
 DESIGNER_AGENT_CONFIG="agent_configs/designer_agent.json"
 CRITIC_AGENT_CONFIG="agent_configs/critic_agent.json"
 STEP_GENERATOR_AGENT_CONFIG="agent_configs/step_generator_agent.json"
-EXEC_PYTHON=""
+EXEC_PYTHON="/home/byx/miniforge3/envs/op-cad/bin/python"
 PYTHON_BIN="python"
 
 TASKS=(
