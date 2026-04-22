@@ -187,7 +187,8 @@ def adjust_gripper_pose(scene, robotarm, pos, quat, save_img):
     q[-2:] = 0
     
     robotarm.set_dofs_position(open_cur_q)
-    waypoints = robotarm.plan_path(q, planner='BITstar')
+    # waypoints = robotarm.plan_path(q, planner='BITstar')
+    waypoints = robotarm.plan_path(q, planner='RRTConnect')
     robotarm.set_dofs_position(cur_q)
 
     for i, waypoint in enumerate(waypoints):
@@ -449,7 +450,8 @@ def my_grasp(scene, robotarm, obj, save_img, restriction_x = None, restriction_y
                     q = q.cpu().numpy()
                     q_clipped = np.clip(q, np.array(joint_limit_low), np.array(joint_limit_high))
 
-                    waypoints = robotarm.plan_path(q_clipped, planner="BITstar")
+                    # waypoints = robotarm.plan_path(q_clipped, planner="BITstar")
+                    waypoints = robotarm.plan_path(q_clipped, planner='RRTConnect')
                     save_img(f'waypoints{len(waypoints)}')
 
                     if len(waypoints) == 0:

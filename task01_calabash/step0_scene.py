@@ -1,11 +1,11 @@
 import numpy as np
 import genesis as gs
-from env_with_CMAES import CMAESOptimizer
+from utils.env_with_CMAES import CMAESOptimizer
 from utils.metric import clip_score
 
 class CalabashEnv(CMAESOptimizer):
-    def __init__(self, task='task01_calabash'):
-        super().__init__(task)
+    def __init__(self, task='task01_calabash', log_dir=None):
+        super().__init__(task, log_dir=log_dir)
 
     def add_entities_for_task(self):
         self.dough = self.scene.add_entity(

@@ -32,3 +32,4 @@ test_api.py
 *OLD*
 agent_configs/*.json
 *trial*
+*tool*
