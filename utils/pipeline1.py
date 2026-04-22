@@ -1402,7 +1402,12 @@ def run_tool_design(task_name, task_prompt_json_dir,
     planing_prompt = planing_prompt.replace("$3D_CONFIGURATION$", designer_prompt_json['3D_CONFIGURATION'])
 
     planing_response = designer.generate(prompt=planing_prompt, img=None, json_mode=False, chat_history=planing_chat_history)
-    with open(os.path.join(log_dir, 'plan.txt'), 'w') as fo:
+
+    # Store plan.txt inside the current round directory (e.g. trial/010/6/plan.txt)
+    # so each round's artifacts stay self-contained.
+    round_dir = os.path.join(log_dir, str(critic_cnt))
+    os.makedirs(round_dir, exist_ok=True)
+    with open(os.path.join(round_dir, 'plan.txt'), 'w') as fo:
         fo.write(planing_response)
 
 if __name__ == "__main__":
