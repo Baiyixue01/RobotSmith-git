@@ -1365,9 +1365,9 @@ def run_tool_design(task_name, task_prompt_json_dir,
         except Exception as e:
             err_summary = f"Error in critic {critic_cnt}: {e}"
             append_execution_log(log_dir, f"{err_summary}\n{traceback.format_exc()}")
+            os.makedirs(attempt_dir, exist_ok=True)
 
             if designer_response_parsed is not None:
-                os.makedirs(attempt_dir, exist_ok=True)
                 fallback_json_filename = os.path.join(attempt_dir, f"design{critic_cnt}_failed.json")
                 json.dump(designer_response_parsed, open(fallback_json_filename, 'w'), indent=4)
 
